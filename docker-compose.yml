@@ -1,0 +1,26 @@
+services:
+  gateway:
+    build: ./gateway
+    ports:
+      - "8000:8000"
+    depends_on:
+      - menu
+      - orders
+      - barkds
+      - auth
+      - payments
+
+  menu:
+    build: ./services/menu
+
+  orders:
+    build: ./services/orders
+
+  barkds:
+    build: ./services/barkds
+
+  auth:
+    build: ./services/auth
+
+  payments:
+    build: ./services/payments
