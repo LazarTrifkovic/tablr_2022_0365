@@ -56,6 +56,22 @@ services:
 
   barkds:
     build: ./services/barkds
+    environment:
+      MONGO_URL: mongodb://barkds-db:27017/barkds
+      ORDERS_URL: http://orders:8000
+    depends_on:
+      barkds-db:
+        condition: service_healthy
+
+  barkds-db:
+    image: mongo:7
+    volumes:
+      - barkds-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   auth:
     build: ./services/auth
@@ -66,3 +82,4 @@ services:
 volumes:
   menu-data:
   orders-data:
+  barkds-data:
