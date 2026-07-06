@@ -30,6 +30,29 @@ services:
 
   orders:
     build: ./services/orders
+    environment:
+      DATABASE_URL: postgresql+asyncpg://orders:orders@orders-db:5432/orders
+      MENU_URL: http://menu:8000
+      BARKDS_URL: http://barkds:8000
+      QR_SECRET: dev-secret-change-in-prod
+      APP_ENV: dev
+    depends_on:
+      orders-db:
+        condition: service_healthy
+
+  orders-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: orders
+      POSTGRES_PASSWORD: orders
+      POSTGRES_DB: orders
+    volumes:
+      - orders-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orders"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   barkds:
     build: ./services/barkds
@@ -42,3 +65,4 @@ services:
 
 volumes:
   menu-data:
+  orders-data:
