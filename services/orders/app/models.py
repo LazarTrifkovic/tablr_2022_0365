@@ -27,9 +27,16 @@ class Order(Base):
     status: Mapped[str] = mapped_column(String(16), default="CREATED")
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     total: Mapped[int] = mapped_column(Integer)
+    # ko od osoblja je preuzeo porudžbinu (izbor konobara u smeni — Faza 3 UI)
+    taken_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+    # vremena tranzicija — osnova za statistiku brzine pripreme (po piću/konobaru)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     items: Mapped[list["OrderItem"]] = relationship(
         back_populates="order", cascade="all, delete-orphan", lazy="selectin"
