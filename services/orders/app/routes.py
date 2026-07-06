@@ -1,5 +1,6 @@
 import logging
 import uuid
+from datetime import datetime, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,11 +25,25 @@ def _order_out(order: Order) -> OrderOut:
         status=order.status,
         note=order.note,
         total=order.total,
+        taken_by=order.taken_by,
         created_at=order.created_at,
+        accepted_at=order.accepted_at,
+        ready_at=order.ready_at,
+        delivered_at=order.delivered_at,
+        cancelled_at=order.cancelled_at,
         items=[OrderItemOut(item_id=i.item_id, name=i.name,
                             unit_price=i.unit_price, qty=i.qty)
                for i in order.items],
     )
+
+
+# koje vremensko polje se popunjava pri kojoj tranziciji
+STATUS_TIMESTAMP = {
+    "ACCEPTED": "accepted_at",
+    "READY": "ready_at",
+    "DELIVERED": "delivered_at",
+    "CANCELLED": "cancelled_at",
+}
 
 
 async def _notify_barkds(order: Order) -> None:
@@ -125,6 +140,9 @@ async def update_status(order_id: uuid.UUID, body: StatusUpdate,
             detail=f"Invalid transition {order.status} -> {body.status}",
         )
     order.status = body.status
+    setattr(order, STATUS_TIMESTAMP[body.status], datetime.now(timezone.utc))
+    if body.taken_by:
+        order.taken_by = body.taken_by
     await session.commit()
     return _order_out(order)
 

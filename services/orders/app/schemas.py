@@ -30,9 +30,15 @@ class OrderOut(BaseModel):
     status: str
     note: str | None
     total: int
+    taken_by: str | None = None
     created_at: datetime
+    accepted_at: datetime | None = None
+    ready_at: datetime | None = None
+    delivered_at: datetime | None = None
+    cancelled_at: datetime | None = None
     items: list[OrderItemOut]
 
 
 class StatusUpdate(BaseModel):
     status: str
+    taken_by: str | None = None
