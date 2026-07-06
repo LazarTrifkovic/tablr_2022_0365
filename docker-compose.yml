@@ -79,6 +79,20 @@ services:
   payments:
     build: ./services/payments
 
+  guest:
+    build: ./frontend/guest
+    ports:
+      - "5173:80"
+    depends_on:
+      - gateway
+
+  bar:
+    build: ./frontend/bar
+    ports:
+      - "5174:80"
+    depends_on:
+      - gateway
+
 volumes:
   menu-data:
   orders-data:
