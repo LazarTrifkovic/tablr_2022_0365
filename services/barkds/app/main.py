@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.config import settings
-from app.models import Ticket
+from app.models import ServiceRequest, Ticket
 from app.routes import router
 
 
@@ -13,7 +13,7 @@ from app.routes import router
 async def lifespan(app: FastAPI):
     client = AsyncIOMotorClient(settings.mongo_url)
     await init_beanie(database=client.get_default_database(),
-                      document_models=[Ticket])
+                      document_models=[Ticket, ServiceRequest])
     yield
     client.close()
 

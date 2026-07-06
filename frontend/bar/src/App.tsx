@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Ticket, WsEvent } from "./types";
+import { orderSound, requestSound, unlockAudio } from "./sounds";
+import type { ServiceRequest, Ticket, WsEvent } from "./types";
 
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const WS_URL = API.replace(/^http/, "ws");
@@ -28,9 +29,17 @@ export default function App() {
 
 function BarApp({ cafeId }: { cafeId: string }) {
   const [tickets, setTickets] = useState<Map<string, Ticket>>(new Map());
+  const [requests, setRequests] = useState<Map<string, ServiceRequest>>(new Map());
   const [connected, setConnected] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+
+  // browseri traže klik pre zvuka — otključaj audio na prvu interakciju
+  useEffect(() => {
+    const unlock = () => unlockAudio();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    return () => window.removeEventListener("pointerdown", unlock);
+  }, []);
 
   const upsert = useCallback((ticket: Ticket) => {
     setTickets((prev) => new Map(prev).set(ticket.order_id, ticket));
@@ -42,7 +51,22 @@ function BarApp({ cafeId }: { cafeId: string }) {
       const list: Ticket[] = await r.json();
       setTickets(new Map(list.map((t) => [t.order_id, t])));
     }
+    const rq = await fetch(`${API}/api/bar/requests?cafe_id=${cafeId}`);
+    if (rq.ok) {
+      const list: ServiceRequest[] = await rq.json();
+      setRequests(new Map(list.map((q) => [q.id, q])));
+    }
   }, [cafeId]);
+
+  const resolveRequest = async (id: string) => {
+    await fetch(`${API}/api/bar/requests/${id}/resolve`, { method: "PATCH" });
+    // uklanjanje stiže i kroz WS event; lokalno odmah radi responzivnosti
+    setRequests((prev) => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
+  };
 
   // WebSocket sa automatskim ponovnim povezivanjem
   useEffect(() => {
@@ -58,10 +82,22 @@ function BarApp({ cafeId }: { cafeId: string }) {
       };
       ws.onmessage = (e) => {
         const event: WsEvent = JSON.parse(e.data);
-        upsert(event.ticket);
-        if (event.type === "ticket.created") {
-          setFlash(event.ticket.order_id);
-          setTimeout(() => setFlash(null), 2500);
+        if (event.type === "ticket.created" || event.type === "ticket.updated") {
+          upsert(event.ticket);
+          if (event.type === "ticket.created") {
+            orderSound();
+            setFlash(event.ticket.order_id);
+            setTimeout(() => setFlash(null), 2500);
+          }
+        } else if (event.type === "request.created") {
+          requestSound();
+          setRequests((prev) => new Map(prev).set(event.request.id, event.request));
+        } else if (event.type === "request.resolved") {
+          setRequests((prev) => {
+            const next = new Map(prev);
+            next.delete(event.request.id);
+            return next;
+          });
         }
       };
       ws.onclose = () => {
@@ -101,6 +137,20 @@ function BarApp({ cafeId }: { cafeId: string }) {
           {connected ? "● uživo" : "○ ponovno povezivanje…"}
         </span>
       </header>
+      {requests.size > 0 && (
+        <div className="requests-strip">
+          {[...requests.values()].map((q) => (
+            <div className="request-card" key={q.id}>
+              <span className="req-icon">{q.kind === "bill" ? "🧾" : "🔔"}</span>
+              <div>
+                <strong>Sto {q.table_number}</strong>
+                <small>{q.kind === "bill" ? "traži račun" : "zove konobara"}</small>
+              </div>
+              <button onClick={() => resolveRequest(q.id)}>Rešeno</button>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="columns">
         {COLUMNS.map((col) => {
           const list = byStatus(col.status);

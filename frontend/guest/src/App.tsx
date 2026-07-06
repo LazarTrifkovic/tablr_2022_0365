@@ -3,6 +3,7 @@ import {
   fetchMenu,
   fetchTableOrders,
   readTableCtx,
+  sendRequest,
   submitOrder,
   type TableCtx,
 } from "./api";
@@ -31,6 +32,20 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
   const [sending, setSending] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
   const [tab, setTab] = useState<"menu" | "orders">("menu");
+  // cooldown po vrsti zahteva — sprečava spamovanje konobara
+  const [cooldown, setCooldown] = useState<Record<string, boolean>>({});
+
+  const callStaff = async (kind: "waiter" | "bill") => {
+    if (cooldown[kind]) return;
+    setCooldown((c) => ({ ...c, [kind]: true }));
+    try {
+      await sendRequest(ctx, kind);
+    } catch {
+      setCooldown((c) => ({ ...c, [kind]: false }));
+      return;
+    }
+    setTimeout(() => setCooldown((c) => ({ ...c, [kind]: false })), 60_000);
+  };
 
   useEffect(() => {
     fetchMenu(ctx.cafeId).then(setMenu).catch((e) => setError(e.message));
@@ -88,6 +103,14 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
         <div>
           <h1>{menu.cafe.name}</h1>
           <span className="table-badge">Sto {ctx.table}</span>
+        </div>
+        <div className="staff-btns">
+          <button disabled={cooldown["waiter"]} onClick={() => callStaff("waiter")}>
+            {cooldown["waiter"] ? "✓ Pozvano" : "🔔 Pozovi konobara"}
+          </button>
+          <button disabled={cooldown["bill"]} onClick={() => callStaff("bill")}>
+            {cooldown["bill"] ? "✓ Traženo" : "🧾 Račun"}
+          </button>
         </div>
         <nav>
           <button className={tab === "menu" ? "active" : ""} onClick={() => setTab("menu")}>

@@ -46,6 +46,23 @@ export async function submitOrder(
   return r.json();
 }
 
+export async function sendRequest(
+  ctx: TableCtx,
+  kind: "waiter" | "bill",
+): Promise<void> {
+  const r = await fetch(`${API}/api/bar/requests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cafe_id: ctx.cafeId,
+      table_number: ctx.table,
+      sig: ctx.sig,
+      kind,
+    }),
+  });
+  if (!r.ok) throw new Error("Zahtev nije prošao");
+}
+
 export async function fetchTableOrders(ctx: TableCtx): Promise<Order[]> {
   const r = await fetch(
     `${API}/api/orders/tables/${ctx.cafeId}/${ctx.table}/orders?sig=${ctx.sig}`,

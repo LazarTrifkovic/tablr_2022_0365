@@ -59,6 +59,7 @@ services:
     environment:
       MONGO_URL: mongodb://barkds-db:27017/barkds
       ORDERS_URL: http://orders:8000
+      QR_SECRET: dev-secret-change-in-prod
     depends_on:
       barkds-db:
         condition: service_healthy

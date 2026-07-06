@@ -13,7 +13,15 @@ export interface Ticket {
   items: TicketItem[];
 }
 
-export interface WsEvent {
-  type: "ticket.created" | "ticket.updated";
-  ticket: Ticket;
+export interface ServiceRequest {
+  id: string;
+  cafe_id: string;
+  table_number: number;
+  kind: "waiter" | "bill";
+  status: "OPEN" | "RESOLVED";
+  created_at: string;
 }
+
+export type WsEvent =
+  | { type: "ticket.created" | "ticket.updated"; ticket: Ticket }
+  | { type: "request.created" | "request.resolved"; request: ServiceRequest };
