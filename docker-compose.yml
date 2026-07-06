@@ -12,6 +12,21 @@ services:
 
   menu:
     build: ./services/menu
+    environment:
+      MONGO_URL: mongodb://menu-db:27017/menu
+    depends_on:
+      menu-db:
+        condition: service_healthy
+
+  menu-db:
+    image: mongo:7
+    volumes:
+      - menu-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   orders:
     build: ./services/orders
@@ -24,3 +39,6 @@ services:
 
   payments:
     build: ./services/payments
+
+volumes:
+  menu-data:
