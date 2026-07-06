@@ -1,0 +1,70 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #171613; color: #f0ede7; min-height: 100vh;
+}
+.screen-msg {
+  min-height: 100vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px; text-align: center;
+}
+.screen-msg code { background: #2b2a25; padding: 2px 8px; border-radius: 6px; }
+
+.board { padding: 16px; }
+header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px;
+}
+header h1 { font-size: 22px; }
+header h1 span { color: #e8632c; }
+.conn { font-size: 13px; }
+.conn.on { color: #6ee7a0; }
+.conn.off { color: #f0b429; }
+
+.columns {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  align-items: start;
+}
+.column {
+  background: #201f1b; border-radius: 14px; padding: 12px;
+  min-height: 70vh;
+}
+.column h2 {
+  font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;
+  color: #9a958a; margin: 4px 4px 12px; display: flex; justify-content: space-between;
+}
+.column h2 em {
+  font-style: normal; background: #2f2e28; border-radius: 999px;
+  padding: 1px 9px; font-size: 12px; color: #f0ede7;
+}
+
+.ticket {
+  background: #2b2a25; border-radius: 12px; padding: 12px 14px;
+  margin-bottom: 10px; border-left: 4px solid #e8632c;
+}
+.ticket.flash { animation: pop .5s ease, glow 2.5s ease; }
+@keyframes pop { 0% { transform: scale(.95); } 60% { transform: scale(1.02); } 100% { transform: scale(1); } }
+@keyframes glow { 0%, 60% { box-shadow: 0 0 0 3px #e8632c88; } 100% { box-shadow: none; } }
+
+.ticket-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 8px;
+}
+.ticket-head strong { font-size: 17px; }
+.ticket-head time { color: #9a958a; font-size: 13px; }
+.ticket ul { list-style: none; margin-bottom: 8px; }
+.ticket li { padding: 3px 0; font-size: 15px; }
+.ticket li b { color: #e8632c; }
+.note { font-size: 13px; color: #d9c58a; margin-bottom: 8px; }
+
+.ticket button {
+  width: 100%; padding: 12px; border: none; border-radius: 9px;
+  background: #e8632c; color: #fff; font-size: 15px; font-weight: 700;
+  cursor: pointer;
+}
+.ticket button:hover { background: #d4571f; }
+.empty { text-align: center; color: #55534c; margin-top: 30px; }
+
+@media (max-width: 800px) {
+  .columns { grid-template-columns: 1fr; }
+  .column { min-height: auto; }
+}
