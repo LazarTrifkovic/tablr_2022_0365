@@ -1,4 +1,5 @@
 fastapi
 uvicorn[standard]
-beanie
+beanie<2
+motor
 pydantic-settings
