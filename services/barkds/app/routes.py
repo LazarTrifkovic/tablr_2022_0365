@@ -1,12 +1,14 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
+from beanie import PydanticObjectId
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.models import Ticket, TicketItem
+from app.models import ServiceRequest, Ticket, TicketItem
+from app.security import verify_table_signature
 from app.ws import manager
 
 logger = logging.getLogger("barkds")
@@ -90,6 +92,74 @@ async def update_status(order_id: str, body: StatusUpdate):
     await manager.broadcast(ticket.cafe_id,
                             {"type": "ticket.updated", "ticket": _ticket_dict(ticket)})
     return _ticket_dict(ticket)
+
+
+class RequestIn(BaseModel):
+    cafe_id: str
+    table_number: int = Field(ge=1, le=500)
+    sig: str
+    kind: str  # "waiter" | "bill"
+
+
+def _request_dict(req: ServiceRequest) -> dict:
+    return {
+        "id": str(req.id),
+        "cafe_id": req.cafe_id,
+        "table_number": req.table_number,
+        "kind": req.kind,
+        "status": req.status,
+        "created_at": req.created_at.isoformat(),
+    }
+
+
+@router.post("/requests", status_code=201)
+async def create_request(body: RequestIn):
+    """Gost poziva konobara ili traži račun — potpis iz QR-a dokazuje sto."""
+    if body.kind not in ("waiter", "bill"):
+        raise HTTPException(status_code=400, detail="Unknown request kind")
+    if not verify_table_signature(body.cafe_id, body.table_number, body.sig):
+        raise HTTPException(status_code=403, detail="Invalid table signature")
+
+    # anti-spam: isti sto + ista vrsta zahteva — vrati postojeći otvoren
+    existing = await ServiceRequest.find_one(
+        ServiceRequest.cafe_id == body.cafe_id,
+        ServiceRequest.table_number == body.table_number,
+        ServiceRequest.kind == body.kind,
+        ServiceRequest.status == "OPEN",
+    )
+    if existing is not None:
+        return _request_dict(existing)
+
+    req = ServiceRequest(cafe_id=body.cafe_id, table_number=body.table_number,
+                         kind=body.kind, created_at=datetime.now(timezone.utc))
+    await req.insert()
+    await manager.broadcast(req.cafe_id,
+                            {"type": "request.created", "request": _request_dict(req)})
+    return _request_dict(req)
+
+
+@router.get("/requests")
+async def list_requests(cafe_id: str, open: bool = True):
+    query = ServiceRequest.find(ServiceRequest.cafe_id == cafe_id)
+    if open:
+        query = query.find(ServiceRequest.status == "OPEN")
+    requests = await query.sort("+created_at").to_list()
+    return [_request_dict(r) for r in requests]
+
+
+@router.patch("/requests/{request_id}/resolve")
+async def resolve_request(request_id: str):
+    try:
+        req = await ServiceRequest.get(PydanticObjectId(request_id))
+    except Exception:
+        req = None
+    if req is None:
+        raise HTTPException(status_code=404, detail="Request not found")
+    req.status = "RESOLVED"
+    await req.save()
+    await manager.broadcast(req.cafe_id,
+                            {"type": "request.resolved", "request": _request_dict(req)})
+    return _request_dict(req)
 
 
 @router.websocket("/ws/{cafe_id}")
