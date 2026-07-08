@@ -11,6 +11,20 @@ const COLUMNS: { status: string; title: string; action?: { to: string; label: st
   { status: "READY", title: "Spremno", action: { to: "DELIVERED", label: "Isporučeno" } },
 ];
 
+// tiket stariji od ovoga (a nije spreman) postaje crven — kasni
+const LATE_MINUTES = 8;
+
+function minutesSince(iso: string): number {
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60_000));
+}
+
+// posle ovoliko minuta čekanja tiket se vizuelno alarmira
+const LATE_MINUTES = 8;
+
+function minutesSince(iso: string): number {
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60_000));
+}
+
 export default function App() {
   const cafeId = useMemo(
     () => new URLSearchParams(window.location.search).get("cafe"),
@@ -33,6 +47,20 @@ function BarApp({ cafeId }: { cafeId: string }) {
   const [connected, setConnected] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+
+  // periodični re-render da tajmeri "čeka X min" žive bez ikakvih zahteva
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // periodičan re-render da tajmeri "čeka X min" ostanu tačni
+  const [, setClock] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setClock((c) => c + 1), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   // browseri traže klik pre zvuka — otključaj audio na prvu interakciju
   useEffect(() => {
@@ -159,19 +187,19 @@ function BarApp({ cafeId }: { cafeId: string }) {
               <h2>
                 {col.title} <em>{list.length}</em>
               </h2>
-              {list.map((t) => (
+              {list.map((t) => {
+                const age = minutesSince(t.created_at);
+                const late = age >= LATE_MINUTES && t.status !== "READY";
+                return (
                 <div
-                  className={`ticket ${flash === t.order_id ? "flash" : ""}`}
+                  className={`ticket ${flash === t.order_id ? "flash" : ""} ${late ? "late" : ""}`}
                   key={t.order_id}
                 >
                   <div className="ticket-head">
                     <strong>Sto {t.table_number}</strong>
-                    <time>
-                      {new Date(t.created_at).toLocaleTimeString("sr-RS", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </time>
+                    <span className={`age ${late ? "age-late" : ""}`}>
+                      {age === 0 ? "upravo stiglo" : `čeka ${age} min`}
+                    </span>
                   </div>
                   <ul>
                     {t.items.map((i, idx) => (
@@ -187,7 +215,8 @@ function BarApp({ cafeId }: { cafeId: string }) {
                     </button>
                   )}
                 </div>
-              ))}
+                );
+              })}
               {list.length === 0 && <p className="empty">—</p>}
             </div>
           );
