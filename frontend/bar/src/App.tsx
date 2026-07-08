@@ -18,13 +18,6 @@ function minutesSince(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60_000));
 }
 
-// posle ovoliko minuta čekanja tiket se vizuelno alarmira
-const LATE_MINUTES = 8;
-
-function minutesSince(iso: string): number {
-  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60_000));
-}
-
 export default function App() {
   const cafeId = useMemo(
     () => new URLSearchParams(window.location.search).get("cafe"),
