@@ -17,6 +17,34 @@ header {
 header h1 { font-size: 22px; }
 header h1 span { color: #e8632c; }
 .conn { font-size: 13px; }
+.view-tabs { display: flex; gap: 6px; }
+.view-tabs button {
+  background: #2b2a25; color: #9a958a; border: none; border-radius: 8px;
+  padding: 8px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.view-tabs button.active { background: #e8632c; color: #fff; }
+
+/* upravljanje menijem */
+.menu-manager section h2 {
+  font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;
+  color: #9a958a; margin: 16px 4px 8px;
+}
+.mm-item {
+  display: flex; align-items: center; gap: 12px;
+  background: #201f1b; border-radius: 10px; padding: 10px 14px; margin-bottom: 6px;
+}
+.mm-item.mm-off { opacity: .55; }
+.mm-item strong { min-width: 210px; font-size: 15px; }
+.mm-item input {
+  flex: 1; background: #2b2a25; border: 1px solid #3a3831; color: #f0ede7;
+  border-radius: 8px; padding: 8px 12px; font-size: 13px;
+}
+.mm-item button {
+  min-width: 90px; border: none; border-radius: 8px; padding: 9px 0;
+  font-weight: 700; cursor: pointer; font-size: 14px;
+}
+.mm-item button.avail { background: #1e4620; color: #8fd39a; }
+.mm-item button.unavail { background: #4a1f1f; color: #ff9b9b; }
 .conn.on { color: #6ee7a0; }
 .conn.off { color: #f0b429; }
 

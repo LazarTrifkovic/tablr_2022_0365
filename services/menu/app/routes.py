@@ -22,7 +22,7 @@ def _cafe_out(cafe: Cafe) -> CafeOut:
 
 def _item_out(item: MenuItem) -> ItemOut:
     return ItemOut(id=str(item.id), name=item.name, description=item.description,
-                   price=item.price, available=item.available,
+                   price=item.price, available=item.available, note=item.note,
                    allergens=item.allergens, image_url=item.image_url)
 
 

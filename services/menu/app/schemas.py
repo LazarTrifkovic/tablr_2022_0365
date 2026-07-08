@@ -7,6 +7,7 @@ class ItemOut(BaseModel):
     description: str | None = None
     price: int
     available: bool
+    note: str | None = None
     allergens: list[str] = []
     image_url: str | None = None
 
@@ -45,6 +46,7 @@ class ItemUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=500)
     price: int | None = Field(default=None, gt=0)
     available: bool | None = None
+    note: str | None = Field(default=None, max_length=200)
     allergens: list[str] | None = None
     image_url: str | None = None
 
