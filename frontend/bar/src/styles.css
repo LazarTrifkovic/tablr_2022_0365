@@ -71,7 +71,13 @@ header h1 span { color: #e8632c; }
   margin-bottom: 8px;
 }
 .ticket-head strong { font-size: 17px; }
-.ticket-head time { color: #9a958a; font-size: 13px; }
+.age { color: #9a958a; font-size: 13px; }
+.age-late { color: #ff6b6b; font-weight: 700; }
+.ticket.late { border-left-color: #e24b4a; animation: late-throb 2s ease-in-out infinite; }
+@keyframes late-throb {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 2px #e24b4a88; }
+}
 .ticket ul { list-style: none; margin-bottom: 8px; }
 .ticket li { padding: 3px 0; font-size: 15px; }
 .ticket li b { color: #e8632c; }
