@@ -7,6 +7,7 @@ class Cafe(Document):
     slug: str
     address: str | None = None
     currency: str = "RSD"
+    tables_count: int = 12  # broj stolova — osnova za mapu i QR generisanje
 
     class Settings:
         name = "cafes"
