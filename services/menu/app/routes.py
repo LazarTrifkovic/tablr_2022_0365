@@ -17,7 +17,8 @@ router = APIRouter()
 
 def _cafe_out(cafe: Cafe) -> CafeOut:
     return CafeOut(id=str(cafe.id), name=cafe.name, slug=cafe.slug,
-                   address=cafe.address, currency=cafe.currency)
+                   address=cafe.address, currency=cafe.currency,
+                   tables_count=cafe.tables_count)
 
 
 def _item_out(item: MenuItem) -> ItemOut:

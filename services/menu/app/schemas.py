@@ -24,6 +24,7 @@ class CafeOut(BaseModel):
     slug: str
     address: str | None = None
     currency: str
+    tables_count: int = 12
 
 
 class MenuOut(BaseModel):

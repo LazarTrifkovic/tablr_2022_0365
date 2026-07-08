@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MenuManager from "./MenuManager";
+import TableMap from "./TableMap";
 import { orderSound, requestSound, unlockAudio } from "./sounds";
 import type { ServiceRequest, Ticket, WsEvent } from "./types";
 
@@ -40,7 +41,7 @@ function BarApp({ cafeId }: { cafeId: string }) {
   const [requests, setRequests] = useState<Map<string, ServiceRequest>>(new Map());
   const [connected, setConnected] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
-  const [view, setView] = useState<"board" | "menu">("board");
+  const [view, setView] = useState<"board" | "map" | "menu">("board");
   const wsRef = useRef<WebSocket | null>(null);
 
   // periodični re-render da tajmeri "čeka X min" žive bez ikakvih zahteva
@@ -160,6 +161,9 @@ function BarApp({ cafeId }: { cafeId: string }) {
           <button className={view === "board" ? "active" : ""} onClick={() => setView("board")}>
             Porudžbine
           </button>
+          <button className={view === "map" ? "active" : ""} onClick={() => setView("map")}>
+            Mapa
+          </button>
           <button className={view === "menu" ? "active" : ""} onClick={() => setView("menu")}>
             Meni
           </button>
@@ -169,6 +173,16 @@ function BarApp({ cafeId }: { cafeId: string }) {
         </span>
       </header>
       {view === "menu" && <MenuManager cafeId={cafeId} />}
+      {view === "map" && (
+        <TableMap
+          cafeId={cafeId}
+          tickets={[...tickets.values()].filter((t) =>
+            ["CREATED", "ACCEPTED", "READY"].includes(t.status),
+          )}
+          requests={[...requests.values()]}
+          onResolveRequest={resolveRequest}
+        />
+      )}
       {view === "board" && (
       <>{/* tabla porudžbina */}
       {requests.size > 0 && (
