@@ -49,6 +49,12 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
 
   useEffect(() => {
     fetchMenu(ctx.cafeId).then(setMenu).catch((e) => setError(e.message));
+    // osvežavaj meni — bar može da menja dostupnost/napomene u toku smene
+    const t = setInterval(
+      () => fetchMenu(ctx.cafeId).then(setMenu).catch(() => {}),
+      30_000,
+    );
+    return () => clearInterval(t);
   }, [ctx.cafeId]);
 
   const refreshOrders = useCallback(() => {
@@ -132,6 +138,7 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
                   <div className="item-info">
                     <strong>{item.name}</strong>
                     {item.description && <small>{item.description}</small>}
+                    {item.note && <small className="item-note">ℹ {item.note}</small>}
                     {item.allergens.length > 0 && (
                       <small className="allergens">⚠ {item.allergens.join(", ")}</small>
                     )}

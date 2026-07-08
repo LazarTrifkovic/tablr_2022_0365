@@ -4,6 +4,7 @@ export interface MenuItem {
   description?: string | null;
   price: number;
   available: boolean;
+  note?: string | null;
   allergens: string[];
 }
 

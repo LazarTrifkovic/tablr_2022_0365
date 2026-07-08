@@ -30,6 +30,8 @@ class MenuItem(Document):
     description: str | None = None
     price: int  # cena u RSD (celi dinari)
     available: bool = True
+    # javna napomena osoblja koju gost vidi u meniju (npr. "danas bez limuna")
+    note: str | None = None
     allergens: list[str] = []
     image_url: str | None = None
 
