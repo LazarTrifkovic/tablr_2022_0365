@@ -1,9 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import type { ServiceRequest, Ticket } from "./types";
 
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 type TableState = "free" | "busy" | "ready" | "call";
+
+interface TableSpot {
+  number: number;
+  zone: string | null;
+  label: string | null;
+  shape: "square" | "round";
+  seats: number | null;
+  x: number | null;
+  y: number | null;
+  w: number;
+  h: number;
+}
 
 const STATE_LABEL: Record<TableState, string> = {
   free: "slobodno",
@@ -20,15 +32,15 @@ interface Props {
 }
 
 export default function TableMap({ cafeId, tickets, requests, onResolveRequest }: Props) {
-  const [tablesCount, setTablesCount] = useState(12);
+  const [tables, setTables] = useState<TableSpot[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
 
   useEffect(() => {
     fetch(`${API}/api/menu/cafes`)
       .then((r) => r.json())
-      .then((cafes: { id: string; tables_count: number }[]) => {
+      .then((cafes: { id: string; tables: TableSpot[] }[]) => {
         const cafe = cafes.find((c) => c.id === cafeId);
-        if (cafe) setTablesCount(cafe.tables_count);
+        if (cafe) setTables(cafe.tables ?? []);
       });
   }, [cafeId]);
 
@@ -43,23 +55,58 @@ export default function TableMap({ cafeId, tickets, requests, onResolveRequest }
   const selectedTickets = tickets.filter((t) => t.table_number === selected);
   const selectedRequests = requests.filter((q) => q.table_number === selected);
 
+  // canvas prikaz samo ako svi stolovi imaju poziciju; inače grid grupisan po zoni
+  const positioned = tables.length > 0 && tables.every((t) => t.x != null && t.y != null);
+
+  const tile = (t: TableSpot, style?: CSSProperties) => {
+    const state = stateOf(t.number);
+    const shapeClass = t.shape === "round" ? "tt-round" : "";
+    const selClass = selected === t.number ? "tt-selected" : "";
+    return (
+      <button
+        key={t.number}
+        className={`table-tile tt-${state} ${shapeClass} ${selClass}`}
+        style={style}
+        onClick={() => setSelected(selected === t.number ? null : t.number)}
+      >
+        <span className="tt-num">{t.number}</span>
+        <span className="tt-label">{t.label ?? STATE_LABEL[state]}</span>
+      </button>
+    );
+  };
+
+  const zones = (): [string, TableSpot[]][] => {
+    const groups = new Map<string, TableSpot[]>();
+    for (const t of tables) {
+      const z = t.zone ?? "—";
+      if (!groups.has(z)) groups.set(z, []);
+      groups.get(z)!.push(t);
+    }
+    return [...groups.entries()];
+  };
+
   return (
     <div className="table-map">
-      <div className="map-grid">
-        {Array.from({ length: tablesCount }, (_, i) => i + 1).map((n) => {
-          const state = stateOf(n);
-          return (
-            <button
-              key={n}
-              className={`table-tile tt-${state} ${selected === n ? "tt-selected" : ""}`}
-              onClick={() => setSelected(selected === n ? null : n)}
-            >
-              <span className="tt-num">{n}</span>
-              <span className="tt-label">{STATE_LABEL[state]}</span>
-            </button>
-          );
-        })}
-      </div>
+      {positioned ? (
+        <div className="map-canvas">
+          {tables.map((t) =>
+            tile(t, {
+              position: "absolute",
+              left: `${t.x}%`,
+              top: `${t.y}%`,
+              width: `${t.w}%`,
+              height: `${t.h}%`,
+            }),
+          )}
+        </div>
+      ) : (
+        zones().map(([zone, spots]) => (
+          <div className="map-zone" key={zone}>
+            <h4 className="map-zone-title">{zone}</h4>
+            <div className="map-grid">{spots.map((t) => tile(t))}</div>
+          </div>
+        ))
+      )}
 
       {selected !== null && (
         <div className="table-detail">

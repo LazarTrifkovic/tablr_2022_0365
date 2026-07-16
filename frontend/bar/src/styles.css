@@ -47,6 +47,16 @@ header h1 span { color: #e8632c; }
 .mm-item button.unavail { background: #4a1f1f; color: #ff9b9b; }
 
 /* mapa stolova */
+.map-canvas {
+  position: relative; width: 100%; aspect-ratio: 16 / 10;
+  background: #201f1b; border: 1px solid #2b2a25; border-radius: 14px;
+}
+.map-canvas .table-tile { aspect-ratio: auto; gap: 2px; overflow: hidden; }
+.map-zone { margin-bottom: 18px; }
+.map-zone-title {
+  font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;
+  color: #9a958a; margin: 0 4px 8px;
+}
 .map-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 12px;
@@ -56,6 +66,7 @@ header h1 span { color: #e8632c; }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 6px; font-family: inherit;
 }
+.tt-round { border-radius: 50%; }
 .tt-num { font-size: 26px; font-weight: 700; }
 .tt-label { font-size: 11px; opacity: .8; }
 .tt-free  { background: #2b2a25; color: #9a958a; }
