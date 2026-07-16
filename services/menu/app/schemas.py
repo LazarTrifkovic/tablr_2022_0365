@@ -18,13 +18,26 @@ class CategoryOut(BaseModel):
     items: list[ItemOut]
 
 
+class TableSpotOut(BaseModel):
+    number: int
+    zone: str | None = None
+    label: str | None = None
+    shape: str = "square"
+    seats: int | None = None
+    x: float | None = None
+    y: float | None = None
+    w: float = 12
+    h: float = 12
+
+
 class CafeOut(BaseModel):
     id: str
     name: str
     slug: str
     address: str | None = None
     currency: str
-    tables_count: int = 12
+    tables: list[TableSpotOut] = []
+    tables_count: int = 0  # izvedeno = len(tables), radi kompatibilnosti potrošača
 
 
 class MenuOut(BaseModel):

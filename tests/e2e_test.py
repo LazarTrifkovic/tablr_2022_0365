@@ -179,11 +179,15 @@ async def main() -> int:
         check("menu: stavka vracena u ponudu", r.status_code == 200
               and r.json()["available"] is True and r.json()["note"] is None)
 
-        # 11. mapa stolova: tables_count dostupan
+        # 11. mapa stolova: lista stolova + izracunat tables_count
         r = await c.get("/api/menu/cafes")
-        check("menu: tables_count za mapu stolova",
-              r.json()[0].get("tables_count", 0) > 0,
-              f"tables_count={r.json()[0].get('tables_count')}")
+        cafe0 = r.json()[0]
+        tables = cafe0.get("tables")
+        check("menu: stolovi za mapu (tables + tables_count)",
+              isinstance(tables, list) and len(tables) > 0
+              and cafe0.get("tables_count") == len(tables),
+              f"tables_count={cafe0.get('tables_count')}, len(tables)="
+              f"{len(tables) if isinstance(tables, list) else 'n/a'}")
 
     failed = [r for r in results if not r[1]]
     print(f"\n{'='*50}\nUKUPNO: {len(results)} testova, "
