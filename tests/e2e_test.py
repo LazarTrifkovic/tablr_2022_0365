@@ -189,6 +189,44 @@ async def main() -> int:
               f"tables_count={cafe0.get('tables_count')}, len(tables)="
               f"{len(tables) if isinstance(tables, list) else 'n/a'}")
 
+        # 12. ceo životni ciklus + arhiva smene (plaćanje + ocena gosta)
+        r = await c.get(f"/api/menu/cafes/{cafe_id}/menu")
+        espresso = r.json()["categories"][0]["items"][0]
+        r = await c.post("/api/orders/orders", json={
+            "cafe_id": cafe_id, "table_number": 7, "sig": sign(cafe_id, 7),
+            "items": [{"item_id": espresso["id"], "qty": 2}]})
+        arch_order = r.json()
+        oid = arch_order["id"]
+        await c.patch(f"/api/bar/tickets/{oid}/status", json={"status": "ACCEPTED"})
+        await c.patch(f"/api/bar/tickets/{oid}/status", json={"status": "READY"})
+        r = await c.patch(f"/api/bar/tickets/{oid}/status",
+                          json={"status": "DELIVERED", "payment_method": "card"})
+        check("orders: isporuka belezi nacin placanja",
+              r.status_code == 200)
+        r = await c.get(f"/api/orders/orders/{oid}")
+        check("orders: payment_method sacuvan (evidencija smene)",
+              r.json().get("payment_method") == "card",
+              str(r.json().get("payment_method")))
+
+        # gost ocenjuje isporucenu porudzbinu (potpis stola stiti od tudje ocene)
+        r = await c.post(f"/api/orders/orders/{oid}/rating",
+                         json={"sig": "laz", "rating": 5})
+        check("rating: falsifikovan potpis odbijen (403)", r.status_code == 403)
+        r = await c.post(f"/api/orders/orders/{oid}/rating",
+                         json={"sig": sign(cafe_id, 7), "rating": 5,
+                               "comment": "Odlicno!"})
+        check("rating: gost ocenio isporucenu porudzbinu",
+              r.status_code == 200 and r.json().get("rating") == 5)
+
+        # arhiva sadrzi zavrsenu porudzbinu sa svim podacima za bilans smene
+        r = await c.get("/api/orders/orders/history", params={"cafe_id": cafe_id})
+        hist = r.json()
+        mine = next((h for h in hist if h["id"] == oid), None)
+        check("arhiva: zavrsena porudzbina vidljiva sa placanjem i ocenom",
+              r.status_code == 200 and mine is not None
+              and mine["payment_method"] == "card" and mine["rating"] == 5,
+              f"nadjeno={mine is not None}")
+
     failed = [r for r in results if not r[1]]
     print(f"\n{'='*50}\nUKUPNO: {len(results)} testova, "
           f"{len(results)-len(failed)} proslo, {len(failed)} palo")

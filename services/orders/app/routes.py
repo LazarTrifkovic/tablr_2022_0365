@@ -1,17 +1,20 @@
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db import get_session
 from app.models import STATUS_FLOW, Order, OrderItem
-from app.schemas import OrderCreate, OrderItemOut, OrderOut, StatusUpdate
+from app.schemas import OrderCreate, OrderItemOut, OrderOut, RatingIn, StatusUpdate
 from app.security import table_signature, verify_table_signature
+
+# koliko dugo posle isporuke gost i dalje vidi porudžbinu (da može da oceni)
+DELIVERED_VISIBLE = timedelta(hours=3)
 
 logger = logging.getLogger("orders")
 router = APIRouter()
@@ -26,6 +29,9 @@ def _order_out(order: Order) -> OrderOut:
         note=order.note,
         total=order.total,
         taken_by=order.taken_by,
+        payment_method=order.payment_method,
+        rating=order.rating,
+        rating_comment=order.rating_comment,
         created_at=order.created_at,
         accepted_at=order.accepted_at,
         ready_at=order.ready_at,
@@ -104,6 +110,22 @@ async def create_order(body: OrderCreate, session: AsyncSession = Depends(get_se
     return _order_out(order)
 
 
+@router.get("/orders/history", response_model=list[OrderOut])
+async def order_history(cafe_id: str, limit: int = 100,
+                        session: AsyncSession = Depends(get_session)):
+    """Arhiva smene — završene porudžbine (isporučene/otkazane), najnovije prve.
+    Osnova za bilans smene: pazar, vreme pripreme, način plaćanja, ocene.
+    Definisano PRE /orders/{order_id} da 'history' ne bi bilo tumačeno kao UUID."""
+    result = await session.execute(
+        select(Order)
+        .where(Order.cafe_id == cafe_id,
+               Order.status.in_(["DELIVERED", "CANCELLED"]))
+        .order_by(Order.created_at.desc())
+        .limit(max(1, min(limit, 500)))
+    )
+    return [_order_out(o) for o in result.scalars().all()]
+
+
 @router.get("/orders/{order_id}", response_model=OrderOut)
 async def get_order(order_id: uuid.UUID, session: AsyncSession = Depends(get_session)):
     order = await session.get(Order, order_id)
@@ -115,16 +137,36 @@ async def get_order(order_id: uuid.UUID, session: AsyncSession = Depends(get_ses
 @router.get("/tables/{cafe_id}/{table_number}/orders", response_model=list[OrderOut])
 async def table_orders(cafe_id: str, table_number: int, sig: str,
                        session: AsyncSession = Depends(get_session)):
-    """Aktivne porudžbine stola — gost vidi samo svoj sto (potpis iz QR-a)."""
+    """Porudžbine stola — gost vidi samo svoj sto (potpis iz QR-a). Aktivne +
+    skoro isporučene (da može da oceni), bez otkazanih."""
     if not verify_table_signature(cafe_id, table_number, sig):
         raise HTTPException(status_code=403, detail="Invalid table signature")
+    cutoff = datetime.now(timezone.utc) - DELIVERED_VISIBLE
     result = await session.execute(
         select(Order)
         .where(Order.cafe_id == cafe_id, Order.table_number == table_number,
-               Order.status.notin_(["DELIVERED", "CANCELLED"]))
+               Order.status != "CANCELLED",
+               or_(Order.status != "DELIVERED", Order.delivered_at >= cutoff))
         .order_by(Order.created_at.desc())
     )
     return [_order_out(o) for o in result.scalars().all()]
+
+
+@router.post("/orders/{order_id}/rating", response_model=OrderOut)
+async def rate_order(order_id: uuid.UUID, body: RatingIn,
+                     session: AsyncSession = Depends(get_session)):
+    """Gost ocenjuje porudžbinu posle isporuke (potpis stola dokazuje ko ocenjuje)."""
+    order = await session.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if not verify_table_signature(order.cafe_id, order.table_number, body.sig):
+        raise HTTPException(status_code=403, detail="Invalid table signature")
+    if order.status != "DELIVERED":
+        raise HTTPException(status_code=409, detail="Order not delivered yet")
+    order.rating = body.rating
+    order.rating_comment = body.comment
+    await session.commit()
+    return _order_out(order)
 
 
 @router.patch("/internal/orders/{order_id}/status", response_model=OrderOut)
@@ -143,6 +185,8 @@ async def update_status(order_id: uuid.UUID, body: StatusUpdate,
     setattr(order, STATUS_TIMESTAMP[body.status], datetime.now(timezone.utc))
     if body.taken_by:
         order.taken_by = body.taken_by
+    if body.payment_method:
+        order.payment_method = body.payment_method
     await session.commit()
     return _order_out(order)
 

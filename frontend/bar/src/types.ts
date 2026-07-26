@@ -13,6 +13,31 @@ export interface Ticket {
   items: TicketItem[];
 }
 
+export interface HistoryItem {
+  item_id: string;
+  name: string;
+  unit_price: number;
+  qty: number;
+}
+
+// završena porudžbina iz arhive smene (orders /orders/history)
+export interface HistoryOrder {
+  id: string;
+  table_number: number;
+  status: string;
+  note: string | null;
+  total: number;
+  payment_method: string | null;
+  rating: number | null;
+  rating_comment: string | null;
+  created_at: string;
+  accepted_at: string | null;
+  ready_at: string | null;
+  delivered_at: string | null;
+  cancelled_at: string | null;
+  items: HistoryItem[];
+}
+
 export interface ServiceRequest {
   id: string;
   cafe_id: string;

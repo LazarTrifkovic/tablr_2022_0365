@@ -29,6 +29,12 @@ class Order(Base):
     total: Mapped[int] = mapped_column(Integer)
     # ko od osoblja je preuzeo porudžbinu (izbor konobara u smeni — Faza 3 UI)
     taken_by: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # način plaćanja koji konobar označi pri isporuci: "cash" | "card"
+    # (evidencija za smenu; pravi Payments/Stripe tok stiže kasnije)
+    payment_method: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # ocena gosta 1–5 + opcioni komentar (unosi se sa gost aplikacije posle isporuke)
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    rating_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

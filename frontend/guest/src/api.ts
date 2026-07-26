@@ -70,3 +70,21 @@ export async function fetchTableOrders(ctx: TableCtx): Promise<Order[]> {
   if (!r.ok) return [];
   return r.json();
 }
+
+export async function submitRating(
+  ctx: TableCtx,
+  orderId: string,
+  rating: number,
+  comment: string,
+): Promise<Order> {
+  const r = await fetch(`${API}/api/orders/orders/${orderId}/rating`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sig: ctx.sig, rating, comment: comment || null }),
+  });
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    throw new Error(body.detail ?? "Ocena nije prošla");
+  }
+  return r.json();
+}

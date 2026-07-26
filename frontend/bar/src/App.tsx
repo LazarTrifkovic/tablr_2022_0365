@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MenuManager from "./MenuManager";
 import TableMap from "./TableMap";
 import { orderSound, requestSound, unlockAudio } from "./sounds";
-import type { ServiceRequest, Ticket, WsEvent } from "./types";
+import type { HistoryOrder, ServiceRequest, Ticket, WsEvent } from "./types";
 
 const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const WS_URL = API.replace(/^http/, "ws");
@@ -10,14 +10,47 @@ const WS_URL = API.replace(/^http/, "ws");
 const COLUMNS: { status: string; title: string; action?: { to: string; label: string } }[] = [
   { status: "CREATED", title: "Novo", action: { to: "ACCEPTED", label: "Prihvati" } },
   { status: "ACCEPTED", title: "U pripremi", action: { to: "READY", label: "Spremno" } },
-  { status: "READY", title: "Spremno", action: { to: "DELIVERED", label: "Isporučeno" } },
+  { status: "READY", title: "Spremno" }, // isporuka ide kroz izbor načina plaćanja
 ];
 
 // tiket stariji od ovoga (a nije spreman) postaje crven — kasni
 const LATE_MINUTES = 8;
 
-function minutesSince(iso: string): number {
-  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60_000));
+const PAY_LABEL: Record<string, string> = { cash: "keš", card: "kartica" };
+
+/** Proteklo vreme kao živi mm:ss brojač. */
+function elapsed(iso: string): { label: string; minutes: number } {
+  const sec = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return { label: `${m}:${s.toString().padStart(2, "0")}`, minutes: m };
+}
+
+/** Trajanje između dva trenutka, kratko ("4m 12s"); "—" ako nedostaje. */
+function duration(fromIso: string | null, toIso: string | null): string {
+  if (!fromIso || !toIso) return "—";
+  const sec = Math.max(0, Math.floor((new Date(toIso).getTime() - new Date(fromIso).getTime()) / 1000));
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (m >= 60) return `${Math.floor(m / 60)}h ${m % 60}m`;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+/** Sekunde → kratak zapis ("4m 12s"). */
+function fmtSec(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  if (m >= 60) return `${Math.floor(m / 60)}h ${m % 60}m`;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+/** Lokalno vreme HH:MM. */
+function clock(iso: string): string {
+  return new Date(iso).toLocaleTimeString("sr-RS", { hour: "2-digit", minute: "2-digit" });
+}
+
+function Stars({ n }: { n: number }) {
+  return <span className="stars" title={`${n}/5`}>{"★".repeat(n)}<span className="star-off">{"★".repeat(5 - n)}</span></span>;
 }
 
 export default function App() {
@@ -41,20 +74,13 @@ function BarApp({ cafeId }: { cafeId: string }) {
   const [requests, setRequests] = useState<Map<string, ServiceRequest>>(new Map());
   const [connected, setConnected] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
-  const [view, setView] = useState<"board" | "map" | "menu">("board");
+  const [view, setView] = useState<"board" | "map" | "menu" | "archive">("board");
   const wsRef = useRef<WebSocket | null>(null);
 
-  // periodični re-render da tajmeri "čeka X min" žive bez ikakvih zahteva
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick((n) => n + 1), 30_000);
-    return () => clearInterval(t);
-  }, []);
-
-  // periodičan re-render da tajmeri "čeka X min" ostanu tačni
+  // jedan otkucaj u sekundi — živi mm:ss tajmeri na tiketima
   const [, setClock] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setClock((c) => c + 1), 30_000);
+    const t = setInterval(() => setClock((c) => c + 1), 1000);
     return () => clearInterval(t);
   }, []);
 
@@ -139,11 +165,11 @@ function BarApp({ cafeId }: { cafeId: string }) {
     };
   }, [cafeId, loadTickets, upsert]);
 
-  const setStatus = async (orderId: string, status: string) => {
+  const setStatus = async (orderId: string, status: string, paymentMethod?: string) => {
     const r = await fetch(`${API}/api/bar/tickets/${orderId}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(paymentMethod ? { status, payment_method: paymentMethod } : { status }),
     });
     if (r.ok) upsert(await r.json());
   };
@@ -167,12 +193,16 @@ function BarApp({ cafeId }: { cafeId: string }) {
           <button className={view === "menu" ? "active" : ""} onClick={() => setView("menu")}>
             Meni
           </button>
+          <button className={view === "archive" ? "active" : ""} onClick={() => setView("archive")}>
+            Arhiva
+          </button>
         </div>
         <span className={`conn ${connected ? "on" : "off"}`}>
           {connected ? "● uživo" : "○ ponovno povezivanje…"}
         </span>
       </header>
       {view === "menu" && <MenuManager cafeId={cafeId} />}
+      {view === "archive" && <Archive cafeId={cafeId} />}
       {view === "map" && (
         <TableMap
           cafeId={cafeId}
@@ -202,38 +232,51 @@ function BarApp({ cafeId }: { cafeId: string }) {
       <div className="columns">
         {COLUMNS.map((col) => {
           const list = byStatus(col.status);
+          // u koloni "Novo" najstarija porudžbina je prioritet (#1 na redu)
+          const ranked = col.status === "CREATED";
           return (
             <div className="column" key={col.status}>
               <h2>
                 {col.title} <em>{list.length}</em>
               </h2>
-              {list.map((t) => {
-                const age = minutesSince(t.created_at);
-                const late = age >= LATE_MINUTES && t.status !== "READY";
+              {list.map((t, idx) => {
+                const { label, minutes } = elapsed(t.created_at);
+                const late = minutes >= LATE_MINUTES && t.status !== "READY";
+                const priority = ranked && idx === 0 && list.length > 1;
                 return (
                 <div
-                  className={`ticket ${flash === t.order_id ? "flash" : ""} ${late ? "late" : ""}`}
+                  className={`ticket ${flash === t.order_id ? "flash" : ""} ${late ? "late" : ""} ${priority ? "priority" : ""}`}
                   key={t.order_id}
                 >
                   <div className="ticket-head">
-                    <strong>Sto {t.table_number}</strong>
-                    <span className={`age ${late ? "age-late" : ""}`}>
-                      {age === 0 ? "upravo stiglo" : `čeka ${age} min`}
-                    </span>
+                    <strong>
+                      {ranked && list.length > 1 && (
+                        <span className={`rank ${priority ? "rank-1" : ""}`}>#{idx + 1}</span>
+                      )}
+                      Sto {t.table_number}
+                    </strong>
+                    <span className={`age ${late ? "age-late" : ""}`}>⏱ {label}</span>
                   </div>
+                  {priority && <span className="priority-tag">na redu prvi</span>}
                   <ul>
-                    {t.items.map((i, idx) => (
-                      <li key={idx}>
+                    {t.items.map((i, k) => (
+                      <li key={k}>
                         <b>{i.qty}×</b> {i.name}
                       </li>
                     ))}
                   </ul>
                   {t.note && <p className="note">💬 {t.note}</p>}
-                  {col.action && (
+                  {col.status === "READY" ? (
+                    <div className="pay-actions">
+                      <span className="pay-label">Isporučeno · plaćeno:</span>
+                      <button onClick={() => setStatus(t.order_id, "DELIVERED", "cash")}>💵 Keš</button>
+                      <button onClick={() => setStatus(t.order_id, "DELIVERED", "card")}>💳 Kartica</button>
+                    </div>
+                  ) : col.action ? (
                     <button onClick={() => setStatus(t.order_id, col.action!.to)}>
                       {col.action.label}
                     </button>
-                  )}
+                  ) : null}
                 </div>
                 );
               })}
@@ -244,6 +287,101 @@ function BarApp({ cafeId }: { cafeId: string }) {
       </div>
       </>
       )}
+    </div>
+  );
+}
+
+function Archive({ cafeId }: { cafeId: string }) {
+  const [orders, setOrders] = useState<HistoryOrder[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    fetch(`${API}/api/orders/orders/history?cafe_id=${cafeId}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Greška pri učitavanju"))))
+      .then(setOrders)
+      .catch((e) => setError(e.message));
+  }, [cafeId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const summary = useMemo(() => {
+    if (!orders) return null;
+    const delivered = orders.filter((o) => o.status === "DELIVERED");
+    const revenue = delivered.reduce((s, o) => s + o.total, 0);
+    const prepDurs = delivered
+      .filter((o) => o.accepted_at && o.ready_at)
+      .map((o) => new Date(o.ready_at!).getTime() - new Date(o.accepted_at!).getTime());
+    const avgPrep = prepDurs.length
+      ? Math.round(prepDurs.reduce((s, d) => s + d, 0) / prepDurs.length / 1000)
+      : null;
+    const rated = delivered.filter((o) => o.rating != null);
+    const avgRating = rated.length
+      ? (rated.reduce((s, o) => s + (o.rating ?? 0), 0) / rated.length)
+      : null;
+    const cash = delivered.filter((o) => o.payment_method === "cash").length;
+    const card = delivered.filter((o) => o.payment_method === "card").length;
+    return { count: delivered.length, revenue, avgPrep, avgRating, rated: rated.length, cash, card };
+  }, [orders]);
+
+  if (error) return <div className="archive"><p className="empty">⚠️ {error}</p></div>;
+  if (!orders) return <div className="archive"><p className="empty">Učitavanje arhive…</p></div>;
+
+  return (
+    <div className="archive">
+      <div className="archive-head">
+        <h2>Arhiva smene</h2>
+        <button className="ghost" onClick={load}>↻ Osveži</button>
+      </div>
+
+      {summary && (
+        <div className="stats">
+          <div className="stat"><span>Porudžbina</span><strong>{summary.count}</strong></div>
+          <div className="stat"><span>Pazar</span><strong>{summary.revenue.toLocaleString("sr-RS")} din</strong></div>
+          <div className="stat"><span>Ø priprema</span><strong>{summary.avgPrep != null ? fmtSec(summary.avgPrep) : "—"}</strong></div>
+          <div className="stat"><span>Ø ocena</span><strong>{summary.avgRating != null ? `★ ${summary.avgRating.toFixed(1)}` : "—"}<small> ({summary.rated})</small></strong></div>
+          <div className="stat"><span>Plaćanje</span><strong>💵 {summary.cash} · 💳 {summary.card}</strong></div>
+        </div>
+      )}
+
+      {orders.length === 0 && <p className="empty">Još nema završenih porudžbina u ovoj smeni.</p>}
+
+      <div className="archive-list">
+        {orders.map((o) => {
+          const cancelled = o.status === "CANCELLED";
+          return (
+          <div className={`archive-card ${cancelled ? "cancelled" : ""}`} key={o.id}>
+            <div className="ac-top">
+              <strong>Sto {o.table_number}</strong>
+              <span className="ac-time">{clock(o.created_at)}</span>
+              {cancelled ? (
+                <span className="ac-cancelled">otkazano</span>
+              ) : (
+                <span className="ac-total">{o.total.toLocaleString("sr-RS")} din</span>
+              )}
+            </div>
+            <div className="ac-items">
+              {o.items.map((i, k) => (
+                <span key={k}>{i.qty}× {i.name}</span>
+              ))}
+            </div>
+            {!cancelled && (
+              <div className="ac-meta">
+                <span>💳 {o.payment_method ? PAY_LABEL[o.payment_method] ?? o.payment_method : "—"}</span>
+                <span>prihvat {duration(o.created_at, o.accepted_at)}</span>
+                <span>priprema {duration(o.accepted_at, o.ready_at)}</span>
+                <span>ukupno {duration(o.created_at, o.delivered_at)}</span>
+              </div>
+            )}
+            {o.rating != null && (
+              <div className="ac-rating">
+                <Stars n={o.rating} />
+                {o.rating_comment && <em>„{o.rating_comment}"</em>}
+              </div>
+            )}
+          </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
