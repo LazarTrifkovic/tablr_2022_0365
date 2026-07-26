@@ -32,6 +32,8 @@ export interface Order {
   total: number;
   note: string | null;
   created_at: string;
+  rating: number | null;
+  rating_comment: string | null;
   items: OrderItem[];
 }
 

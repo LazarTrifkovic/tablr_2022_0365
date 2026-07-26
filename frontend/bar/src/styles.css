@@ -170,6 +170,69 @@ header h1 span { color: #e8632c; }
 .ticket button:hover { background: #d4571f; }
 .empty { text-align: center; color: #55534c; margin-top: 30px; }
 
+/* prioritet u koloni "Novo" — najstarija porudžbina se ističe */
+.rank {
+  display: inline-block; min-width: 22px; text-align: center;
+  font-size: 12px; font-weight: 700; color: #9a958a;
+  background: #201f1b; border-radius: 6px; padding: 1px 5px; margin-right: 7px;
+}
+.rank-1 { color: #201f1b; background: #f0b429; }
+.ticket.priority {
+  border-left-color: #f0b429;
+  box-shadow: 0 0 0 1px #f0b42955, 0 6px 16px #0006;
+}
+.priority-tag {
+  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .5px;
+  text-transform: uppercase; color: #f0b429; margin: -2px 0 8px;
+}
+
+/* izbor načina plaćanja pri isporuci */
+.pay-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pay-label { flex-basis: 100%; font-size: 12px; color: #9a958a; margin-bottom: 2px; }
+.pay-actions button { width: auto; flex: 1; padding: 10px; background: #3a3833; }
+.pay-actions button:hover { background: #4a4740; }
+
+/* arhiva smene */
+.archive { padding: 4px 2px 40px; }
+.archive-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.archive-head h2 { font-size: 18px; }
+.ghost {
+  background: transparent; border: 1px solid #3a3833; color: #cfc9bd;
+  border-radius: 8px; padding: 7px 12px; cursor: pointer; font-size: 14px;
+}
+.ghost:hover { background: #2b2a25; }
+
+.stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px; margin-bottom: 18px;
+}
+.stat {
+  background: #2b2a25; border-radius: 12px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.stat span { font-size: 12px; color: #9a958a; text-transform: uppercase; letter-spacing: .5px; }
+.stat strong { font-size: 20px; }
+.stat strong small { font-size: 12px; color: #9a958a; font-weight: 400; }
+
+.archive-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.archive-card {
+  background: #2b2a25; border-radius: 12px; padding: 12px 14px;
+  border-left: 4px solid #6ee7a0;
+}
+.archive-card.cancelled { border-left-color: #55534c; opacity: .65; }
+.ac-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.ac-top strong { font-size: 16px; }
+.ac-time { font-size: 12px; color: #9a958a; }
+.ac-total { margin-left: auto; font-weight: 700; color: #6ee7a0; }
+.ac-cancelled { margin-left: auto; font-size: 12px; color: #9a958a; text-transform: uppercase; }
+.ac-items { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 14px; margin-bottom: 8px; }
+.ac-items span { color: #d7d2c7; }
+.ac-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: #9a958a; }
+.ac-rating { margin-top: 8px; font-size: 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ac-rating em { color: #d9c58a; font-style: italic; }
+.stars { color: #f0b429; letter-spacing: 1px; }
+.star-off { color: #4a4740; }
+
 @media (max-width: 800px) {
   .columns { grid-template-columns: 1fr; }
   .column { min-height: auto; }

@@ -5,6 +5,7 @@ import {
   readTableCtx,
   sendRequest,
   submitOrder,
+  submitRating,
   type TableCtx,
 } from "./api";
 import { STATUS_LABELS, type Menu, type Order } from "./types";
@@ -178,6 +179,9 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
                 ))}
               </ul>
               {o.note && <small>Napomena: {o.note}</small>}
+              {o.status === "DELIVERED" && (
+                <RatingBlock ctx={ctx} order={o} onRated={refreshOrders} />
+              )}
             </div>
           ))}
         </main>
@@ -197,6 +201,78 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
           {error && <small className="err">{error}</small>}
         </footer>
       )}
+    </div>
+  );
+}
+
+function RatingBlock({
+  ctx,
+  order,
+  onRated,
+}: {
+  ctx: TableCtx;
+  order: Order;
+  onRated: () => void;
+}) {
+  const [stars, setStars] = useState(0);
+  const [hover, setHover] = useState(0);
+  const [comment, setComment] = useState("");
+  const [sending, setSending] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  // već ocenjeno — prikaži zahvalnicu sa datom ocenom
+  if (order.rating != null) {
+    return (
+      <div className="rating done">
+        <span className="rate-stars">{"★".repeat(order.rating)}<span className="off">{"★".repeat(5 - order.rating)}</span></span>
+        <small>Hvala na oceni! 🙏</small>
+      </div>
+    );
+  }
+
+  const send = async () => {
+    if (stars === 0) return;
+    setSending(true);
+    setErr(null);
+    try {
+      await submitRating(ctx, order.id, stars, comment);
+      onRated();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Greška");
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="rating">
+      <span className="rate-label">Kako je bilo?</span>
+      <div className="rate-stars pick" onMouseLeave={() => setHover(0)}>
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            className={n <= (hover || stars) ? "on" : ""}
+            onMouseEnter={() => setHover(n)}
+            onClick={() => setStars(n)}
+            aria-label={`${n} od 5`}
+          >
+            ★
+          </button>
+        ))}
+      </div>
+      {stars > 0 && (
+        <>
+          <input
+            placeholder="Komentar (opciono)"
+            value={comment}
+            maxLength={300}
+            onChange={(e) => setComment(e.target.value)}
+          />
+          <button className="rate-send" disabled={sending} onClick={send}>
+            {sending ? "Šaljem…" : "Pošalji ocenu"}
+          </button>
+        </>
+      )}
+      {err && <small className="err">{err}</small>}
     </div>
   );
 }

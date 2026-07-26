@@ -17,6 +17,14 @@ router = APIRouter()
 ACTIVE_STATUSES = ["CREATED", "ACCEPTED", "READY"]
 
 
+def _iso_utc(dt: datetime) -> str:
+    """ISO string sa UTC oznakom. Mongo vraća naive datetime (bez tz), pa bez ovoga
+    frontend čita vreme kao lokalno i tajmer 'skoči' za offset (npr. +2h leti)."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
 class TicketIn(BaseModel):
     order_id: str
     cafe_id: str
@@ -29,6 +37,7 @@ class TicketIn(BaseModel):
 
 class StatusUpdate(BaseModel):
     status: str
+    payment_method: str | None = None  # konobar označi keš/kartica pri isporuci
 
 
 def _ticket_dict(ticket: Ticket) -> dict:
@@ -38,7 +47,7 @@ def _ticket_dict(ticket: Ticket) -> dict:
         "table_number": ticket.table_number,
         "status": ticket.status,
         "note": ticket.note,
-        "created_at": ticket.created_at.isoformat(),
+        "created_at": _iso_utc(ticket.created_at),
         "items": [item.model_dump() for item in ticket.items],
     }
 
@@ -77,9 +86,12 @@ async def update_status(order_id: str, body: StatusUpdate):
     # orders servis je vlasnik status mašine — on validira tranziciju
     try:
         async with httpx.AsyncClient(timeout=5) as client:
+            payload: dict = {"status": body.status}
+            if body.payment_method:
+                payload["payment_method"] = body.payment_method
             resp = await client.patch(
                 f"{settings.orders_url}/internal/orders/{order_id}/status",
-                json={"status": body.status},
+                json=payload,
             )
     except httpx.HTTPError:
         raise HTTPException(status_code=503, detail="Orders service unavailable")
@@ -108,7 +120,7 @@ def _request_dict(req: ServiceRequest) -> dict:
         "table_number": req.table_number,
         "kind": req.kind,
         "status": req.status,
-        "created_at": req.created_at.isoformat(),
+        "created_at": _iso_utc(req.created_at),
     }
 
 

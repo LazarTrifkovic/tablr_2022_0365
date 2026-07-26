@@ -31,6 +31,9 @@ class OrderOut(BaseModel):
     note: str | None
     total: int
     taken_by: str | None = None
+    payment_method: str | None = None
+    rating: int | None = None
+    rating_comment: str | None = None
     created_at: datetime
     accepted_at: datetime | None = None
     ready_at: datetime | None = None
@@ -42,3 +45,12 @@ class OrderOut(BaseModel):
 class StatusUpdate(BaseModel):
     status: str
     taken_by: str | None = None
+    # konobar pri isporuci označi kako je gost platio: "cash" | "card"
+    payment_method: str | None = None
+
+
+class RatingIn(BaseModel):
+    """Ocena gosta posle isporuke — potpis iz QR-a dokazuje sto."""
+    sig: str
+    rating: int = Field(ge=1, le=5)
+    comment: str | None = Field(default=None, max_length=300)
