@@ -90,6 +90,23 @@ async def create_cafe(body: CafeCreate):
     return _cafe_out(cafe)
 
 
+@router.delete("/internal/cafes/{cafe_id}", status_code=204)
+async def delete_cafe(cafe_id: str):
+    """KOMPENZACIONA akcija za onboarding-sagu (Faza 4): poništava kreiranje kafića
+    ako naredni korak (kreiranje vlasnika) padne. Briše kafić + kategorije + stavke.
+    Interna (blokirana na gateway-u), idempotentna (nepostojeći kafić = već poništen)."""
+    try:
+        oid = PydanticObjectId(cafe_id)
+    except Exception:
+        return  # nevalidan id → tretiraj kao već obrisan
+    cafe = await Cafe.get(oid)
+    if cafe is None:
+        return
+    await MenuItem.find(MenuItem.cafe_id == cafe.id).delete()
+    await Category.find(Category.cafe_id == cafe.id).delete()
+    await cafe.delete()
+
+
 @router.post("/cafes/{cafe_id}/categories", response_model=CategoryOut, status_code=201)
 async def create_category(cafe_id: str, body: CategoryCreate):
     cafe = await _get_cafe_or_404(cafe_id)

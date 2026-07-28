@@ -463,6 +463,17 @@ async def main() -> int:
               r.status_code == 201 and ob["user"]["role"] == "vlasnik"
               and "access_token" in ob and ob["user"]["cafe_id"] != cafe_id)
 
+        # 19. Saga onboarding — kompenzacija: pad Koraka 2 poništava kafić iz Koraka 1
+        # (dev fault-injection: email 'saga-fail@...' obara kreiranje vlasnika)
+        before = len((await c.get("/api/menu/cafes")).json())
+        r = await c.post("/api/auth/onboard", json={
+            "cafe_name": "Saga Fail Test", "email": "saga-fail@test.rs",
+            "password": "tajna123", "name": "Test"})
+        check("saga: onboard sa greskom Koraka 2 -> 500", r.status_code == 500)
+        after = len((await c.get("/api/menu/cafes")).json())
+        check("saga: kafić kompenzovan (broj kafića nepromenjen)",
+              after == before, f"{before} -> {after}")
+
     failed = [r for r in results if not r[1]]
     print(f"\n{'='*50}\nUKUPNO: {len(results)} testova, "
           f"{len(results)-len(failed)} proslo, {len(failed)} palo")
