@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db import get_session
+from app.events import publish_order_event
 from app.models import STATUS_FLOW, Order, OrderItem
 from app.schemas import (BillItemOut, BillOut, CancelIn, OrderCreate, OrderItemOut,
                          OrderOut, RatingIn, SettleIn, StatusUpdate)
@@ -54,8 +55,10 @@ STATUS_TIMESTAMP = {
 
 
 async def _notify_barkds(order: Order) -> None:
-    """Šalje tiket Bar/KDS servisu. (U Fazi 4 postaje Kafka event.)"""
-    payload = {
+    """Objavljuje 'order.created' na Kafka topic. (Faza 4: bilo direktan HTTP poziv
+    ka barkds-u; sad je asinhroni događaj — barkds ga konzumira svojim tempom.)"""
+    await publish_order_event({
+        "type": "order.created",
         "order_id": str(order.id),
         "cafe_id": order.cafe_id,
         "table_number": order.table_number,
@@ -63,27 +66,17 @@ async def _notify_barkds(order: Order) -> None:
         "note": order.note,
         "created_at": order.created_at.isoformat(),
         "items": [{"name": i.name, "qty": i.qty} for i in order.items],
-    }
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            await client.post(f"{settings.barkds_url}/internal/tickets", json=payload)
-    except httpx.HTTPError:
-        # porudžbina je sačuvana; bar će je povući pri sledećem osvežavanju
-        logger.warning("Bar/KDS nedostupan — tiket %s nije odmah isporučen", order.id)
+    })
 
 
 async def _notify_barkds_status(order_id: uuid.UUID, status: str) -> None:
-    """Javlja Bar/KDS-u promenu statusa koju je pokrenuo orders (npr. gostovo
-    otkazivanje) — obrnut smer od uobičajenog bar→orders. Best-effort."""
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            await client.patch(
-                f"{settings.barkds_url}/internal/tickets/{order_id}/status",
-                json={"status": status},
-            )
-    except httpx.HTTPError:
-        logger.warning("Bar/KDS nedostupan — status %s za tiket %s nije prosleđen",
-                       status, order_id)
+    """Objavljuje promenu statusa koju je pokrenuo orders (npr. gostovo otkazivanje)
+    kao Kafka događaj 'order.<status>' (npr. order.cancelled) — barkds skida tiket."""
+    await publish_order_event({
+        "type": f"order.{status.lower()}",
+        "order_id": str(order_id),
+        "status": status,
+    })
 
 
 @router.post("/orders", response_model=OrderOut, status_code=201)

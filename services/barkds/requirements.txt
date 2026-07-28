@@ -4,3 +4,4 @@ beanie<2
 motor
 httpx
 pydantic-settings
+aiokafka

@@ -52,31 +52,48 @@ def _ticket_dict(ticket: Ticket) -> dict:
     }
 
 
-@router.post("/internal/tickets", status_code=201)
-async def receive_ticket(body: TicketIn):
-    """Prima novu porudžbinu od orders servisa. (U Fazi 4 postaje Kafka consumer.)"""
+# --- Zajednička logika: koriste je I Kafka consumer (app/consumer.py) I HTTP rute ispod.
+# Time se isti posao (upis tiketa + WS broadcast) ne duplira. ---
+
+async def apply_new_ticket(body: TicketIn) -> Ticket:
+    """Kreira tiket iz porudžbine i emituje ga baru. Idempotentno — ako tiket za taj
+    order_id već postoji (npr. Kafka isporuči poruku dvaput), vraća postojeći."""
     existing = await Ticket.find_one(Ticket.order_id == body.order_id)
     if existing is not None:
-        return _ticket_dict(existing)  # idempotentno — isti tiket ne dupliramo
-
+        return existing
     ticket = Ticket(**body.model_dump())
     await ticket.insert()
     await manager.broadcast(ticket.cafe_id,
                             {"type": "ticket.created", "ticket": _ticket_dict(ticket)})
-    return _ticket_dict(ticket)
+    return ticket
+
+
+async def apply_ticket_status(order_id: str, status: str) -> Ticket | None:
+    """Menja status postojećeg tiketa i emituje `ticket.updated`. Vraća None ako
+    tiket ne postoji (npr. otkazivanje pre nego što je tiket uopšte stigao)."""
+    ticket = await Ticket.find_one(Ticket.order_id == order_id)
+    if ticket is None:
+        return None
+    ticket.status = status
+    await ticket.save()
+    await manager.broadcast(ticket.cafe_id,
+                            {"type": "ticket.updated", "ticket": _ticket_dict(ticket)})
+    return ticket
+
+
+@router.post("/internal/tickets", status_code=201)
+async def receive_ticket(body: TicketIn):
+    """HTTP fallback za prijem tiketa (primarni put je Kafka consumer). Ostaje kao
+    rezervni/interni ulaz; blokiran na gateway-u spolja."""
+    return _ticket_dict(await apply_new_ticket(body))
 
 
 @router.patch("/internal/tickets/{order_id}/status")
 async def receive_status(order_id: str, body: StatusUpdate):
-    """Prima promenu statusa koju je pokrenuo orders (npr. gostovo otkazivanje) i
-    emituje je na WS istim `ticket.updated` eventom — tiket nestaje iz aktivnih kolona."""
-    ticket = await Ticket.find_one(Ticket.order_id == order_id)
+    """HTTP fallback za promenu statusa iz orders-a (primarni put je Kafka consumer)."""
+    ticket = await apply_ticket_status(order_id, body.status)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket not found")
-    ticket.status = body.status
-    await ticket.save()
-    await manager.broadcast(ticket.cafe_id,
-                            {"type": "ticket.updated", "ticket": _ticket_dict(ticket)})
     return _ticket_dict(ticket)
 
 
