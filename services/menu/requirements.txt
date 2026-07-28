@@ -3,3 +3,4 @@ uvicorn[standard]
 beanie<2
 motor
 pydantic-settings
+httpx
