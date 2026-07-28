@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db import get_session
 from app.models import STATUS_FLOW, Order, OrderItem
-from app.schemas import (BillItemOut, BillOut, OrderCreate, OrderItemOut, OrderOut,
-                         RatingIn, SettleIn, StatusUpdate)
+from app.schemas import (BillItemOut, BillOut, CancelIn, OrderCreate, OrderItemOut,
+                         OrderOut, RatingIn, SettleIn, StatusUpdate)
 from app.security import table_signature, verify_table_signature
 
 # koliko dugo posle isporuke gost i dalje vidi porudžbinu (da može da oceni)
@@ -70,6 +70,20 @@ async def _notify_barkds(order: Order) -> None:
     except httpx.HTTPError:
         # porudžbina je sačuvana; bar će je povući pri sledećem osvežavanju
         logger.warning("Bar/KDS nedostupan — tiket %s nije odmah isporučen", order.id)
+
+
+async def _notify_barkds_status(order_id: uuid.UUID, status: str) -> None:
+    """Javlja Bar/KDS-u promenu statusa koju je pokrenuo orders (npr. gostovo
+    otkazivanje) — obrnut smer od uobičajenog bar→orders. Best-effort."""
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.patch(
+                f"{settings.barkds_url}/internal/tickets/{order_id}/status",
+                json={"status": status},
+            )
+    except httpx.HTTPError:
+        logger.warning("Bar/KDS nedostupan — status %s za tiket %s nije prosleđen",
+                       status, order_id)
 
 
 @router.post("/orders", response_model=OrderOut, status_code=201)
@@ -226,25 +240,60 @@ async def rate_order(order_id: uuid.UUID, body: RatingIn,
     return _order_out(order)
 
 
-@router.patch("/internal/orders/{order_id}/status", response_model=OrderOut)
-async def update_status(order_id: uuid.UUID, body: StatusUpdate,
-                        session: AsyncSession = Depends(get_session)):
-    """Interna ruta — Bar/KDS javlja promenu statusa."""
+@router.post("/orders/{order_id}/cancel", response_model=OrderOut)
+async def cancel_order(order_id: uuid.UUID, body: CancelIn,
+                       session: AsyncSession = Depends(get_session)):
+    """Gost otkazuje SVOJU porudžbinu dok još nije prihvaćena (status CREATED).
+    Atomski CAS `WHERE status='CREATED'` rešava trku sa konobarovim prihvatanjem."""
     order = await session.get(Order, order_id)
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
-    if body.status not in STATUS_FLOW.get(order.status, set()):
+    if not verify_table_signature(order.cafe_id, order.table_number, body.sig):
+        raise HTTPException(status_code=403, detail="Invalid table signature")
+    result = await session.execute(
+        update(Order)
+        .where(Order.id == order_id, Order.status == "CREATED")
+        .values(status="CANCELLED", cancelled_at=datetime.now(timezone.utc))
+    )
+    if result.rowcount == 0:
+        # neko je stigao prvi: konobar je prihvatio ili je već otkazano
+        raise HTTPException(status_code=409,
+                            detail="Order already accepted or cancelled")
+    await session.commit()
+    await session.refresh(order)
+    await _notify_barkds_status(order_id, "CANCELLED")
+    return _order_out(order)
+
+
+@router.patch("/internal/orders/{order_id}/status", response_model=OrderOut)
+async def update_status(order_id: uuid.UUID, body: StatusUpdate,
+                        session: AsyncSession = Depends(get_session)):
+    """Interna ruta — Bar/KDS javlja promenu statusa. Tranzicija se izvodi atomski
+    (`WHERE status=<trenutni>`) da bi bila bezbedna uz gostovu cancel rutu."""
+    order = await session.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    current = order.status
+    if body.status not in STATUS_FLOW.get(current, set()):
         raise HTTPException(
             status_code=409,
-            detail=f"Invalid transition {order.status} -> {body.status}",
+            detail=f"Invalid transition {current} -> {body.status}",
         )
-    order.status = body.status
-    setattr(order, STATUS_TIMESTAMP[body.status], datetime.now(timezone.utc))
+    values: dict = {"status": body.status,
+                    STATUS_TIMESTAMP[body.status]: datetime.now(timezone.utc)}
     if body.taken_by:
-        order.taken_by = body.taken_by
+        values["taken_by"] = body.taken_by
     if body.payment_method:
-        order.payment_method = body.payment_method
+        values["payment_method"] = body.payment_method
+    result = await session.execute(
+        update(Order).where(Order.id == order_id, Order.status == current)
+        .values(**values)
+    )
+    if result.rowcount == 0:
+        # status se promenio između čitanja i pisanja (npr. gost otkazao u međuvremenu)
+        raise HTTPException(status_code=409, detail="Order changed concurrently")
     await session.commit()
+    await session.refresh(order)
     return _order_out(order)
 
 

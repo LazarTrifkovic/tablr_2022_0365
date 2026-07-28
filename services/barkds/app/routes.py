@@ -66,6 +66,20 @@ async def receive_ticket(body: TicketIn):
     return _ticket_dict(ticket)
 
 
+@router.patch("/internal/tickets/{order_id}/status")
+async def receive_status(order_id: str, body: StatusUpdate):
+    """Prima promenu statusa koju je pokrenuo orders (npr. gostovo otkazivanje) i
+    emituje je na WS istim `ticket.updated` eventom — tiket nestaje iz aktivnih kolona."""
+    ticket = await Ticket.find_one(Ticket.order_id == order_id)
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    ticket.status = body.status
+    await ticket.save()
+    await manager.broadcast(ticket.cafe_id,
+                            {"type": "ticket.updated", "ticket": _ticket_dict(ticket)})
+    return _ticket_dict(ticket)
+
+
 @router.get("/tickets")
 async def list_tickets(cafe_id: str, active: bool = True):
     """Tiketi kafića — inicijalno punjenje bar dashboard-a."""
