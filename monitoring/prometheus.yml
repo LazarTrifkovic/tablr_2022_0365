@@ -1,0 +1,22 @@
+# Prometheus skrejpuje /metrics sa svakog tablr servisa (Faza 4 — monitoring).
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: tablr
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["gateway:8000"]
+        labels: { service: gateway }
+      - targets: ["menu:8000"]
+        labels: { service: menu }
+      - targets: ["orders:8000"]
+        labels: { service: orders }
+      - targets: ["barkds:8000"]
+        labels: { service: barkds }
+      - targets: ["auth:8000"]
+        labels: { service: auth }
+      - targets: ["payments:8000"]
+        labels: { service: payments }
+      - targets: ["reporting:8000"]
+        labels: { service: reporting }

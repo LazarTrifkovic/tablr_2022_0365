@@ -24,8 +24,11 @@ async def lifespan(app: FastAPI):
     client.close()
 
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
 app = FastAPI(title="Tablr Bar/KDS Service", lifespan=lifespan)
 app.include_router(router)
+Instrumentator().instrument(app).expose(app)  # izloži /metrics za Prometheus
 
 
 @app.get("/health")

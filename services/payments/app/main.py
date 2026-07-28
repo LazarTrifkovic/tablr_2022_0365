@@ -8,8 +8,11 @@ from app.breaker import CircuitBreaker, CircuitOpenError
 from app.config import settings
 from app.security import verify_table_signature
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
 logger = logging.getLogger("payments")
 app = FastAPI(title="Tablr Payments Service")
+Instrumentator().instrument(app).expose(app)  # izloži /metrics za Prometheus
 
 # prekidač za sinhroni poziv ka orders servisu (obeležavanje stavki plaćenim)
 orders_breaker = CircuitBreaker("orders", fail_max=3, reset_timeout=10)
