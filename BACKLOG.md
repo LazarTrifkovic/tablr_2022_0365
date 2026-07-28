@@ -56,10 +56,14 @@
   `fetch` bez `.catch`. + Field ograničenja na `TableSpot` — *pre Bloka 2.*
 
 ## Bezbednost / Auth (Faza 3)
-- **[Auth]** JWT + uloge (vlasnik/konobar) — *otključava editor mape, admin panel,
-  `taken_by` statistiku.*
-- **[Auth]** Zaključati iza Auth-a: arhiva (pokazuje pazar), settle ruta (naplata),
-  admin rute — *sad su otvorene kao i ceo dashboard.*
+- ✅ **[Auth — URAĐENO]** JWT + uloge (vlasnik/konobar); gateway validira token, štiti
+  tablu/status/settle (osoblje) + arhivu/register (vlasnik); bar dashboard ima login.
+- **[Auth — ostaje]** `taken_by` statistika (ko je preuzeo porudžbinu) — X-User se sad
+  prosleđuje kroz gateway; orders to još ne beleži na tranziciji. *Uz statistiku smene.*
+- **[Auth — ostaje]** `/register` je zaštićen (samo vlasnik), ali UI za dodavanje osoblja
+  dolazi tek sa admin panelom. *Sad se nalozi dodaju samo seed-om/API-jem.*
+- **[Auth — produkcija]** `JWT_SECRET` hardkodovan u compose (kao QR_SECRET) — v. sekcija
+  "Pred kraj". Admin/editor mape rute treba zaštititi kad se naprave.
 
 ## 🏁 Pred kraj projekta / pre produkcije (obavezne izmene — dev-prečice koje se moraju srediti)
 > Ovo su svesne prečice iz razvoja koje su OK za ispit/demo ali NE smeju u pravi kafić.
