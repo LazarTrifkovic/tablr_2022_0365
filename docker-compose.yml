@@ -16,6 +16,8 @@ services:
     build: ./services/menu
     environment:
       MONGO_URL: mongodb://menu-db:27017/menu
+      QR_SECRET: dev-secret-change-in-prod
+      GUEST_BASE_URL: http://localhost:5173
     depends_on:
       menu-db:
         condition: service_healthy
@@ -118,6 +120,13 @@ services:
     build: ./frontend/bar
     ports:
       - "5174:80"
+    depends_on:
+      - gateway
+
+  admin:
+    build: ./frontend/admin
+    ports:
+      - "5175:80"
     depends_on:
       - gateway
 

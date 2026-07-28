@@ -24,7 +24,8 @@ def sign(cafe_id: str, table: int) -> str:
 
 
 async def main() -> int:
-    async with httpx.AsyncClient(base_url=BASE, timeout=10) as c:
+    # timeout 20s: eksterni API-ji (Frankfurter/OFF) na hladnom startu umeju da retry-uju
+    async with httpx.AsyncClient(base_url=BASE, timeout=20) as c:
         # 1. zdravlje sistema
         r = await c.get("/health")
         services = r.json().get("services", {})
@@ -46,12 +47,14 @@ async def main() -> int:
         check("auth: pogrešna lozinka -> 401", r.status_code == 401)
         c.headers["Authorization"] = f"Bearer {vlasnik_token}"
 
-        # 2. meni
+        # 2. meni (otporno na onboarding test koji ostavlja dodatne kafiće)
         r = await c.get("/api/menu/cafes")
         cafes = r.json()
-        check("menu: lista kafica", r.status_code == 200 and len(cafes) == 1,
-              cafes[0]["name"] if cafes else "prazno")
-        cafe_id = cafes[0]["id"]
+        demo = next((x for x in cafes if x["slug"] == "panorama"), None)
+        check("menu: lista kafica (demo kafić prisutan)",
+              r.status_code == 200 and demo is not None,
+              demo["name"] if demo else f"nema demo; kafića={len(cafes)}")
+        cafe_id = demo["id"]
 
         r = await c.get(f"/api/menu/cafes/{cafe_id}/menu")
         menu = r.json()
@@ -415,6 +418,50 @@ async def main() -> int:
         r = await c.patch(f"/api/menu/cafes/{cafe_id}/tables", json=restore)
         check("editor mape: originalni raspored vraćen",
               r.status_code == 200 and r.json()["tables_count"] == len(before))
+
+        # 18. admin panel — onboarding, kategorije CRUD, QR linkovi, staff (uloge)
+        r = await c.get(f"/api/menu/cafes/{cafe_id}/qr-links",
+                        headers={"Authorization": ""})
+        check("admin: QR linkovi bez tokena -> 401", r.status_code == 401)
+        r = await c.get(f"/api/menu/cafes/{cafe_id}/qr-links")  # vlasnik token je default
+        ql = r.json()
+        check("admin: QR linkovi (potpisan URL po stolu)",
+              r.status_code == 200 and len(ql) > 0
+              and all("sig=" in x["url"] and "table=" in x["url"] for x in ql),
+              f"stolova={len(ql) if isinstance(ql, list) else 'n/a'}")
+
+        r = await c.get(f"/api/auth/cafes/{cafe_id}/staff",
+                        headers={"Authorization": f"Bearer {konobar_token}"})
+        check("admin: staff lista konobaru zabranjena -> 403", r.status_code == 403)
+        r = await c.get(f"/api/auth/cafes/{cafe_id}/staff")
+        check("admin: staff lista (vlasnik) sadrzi demo naloge",
+              r.status_code == 200 and len(r.json()) >= 2)
+
+        # kategorija CRUD (vlasnik); konobar ne sme da kreira
+        r = await c.post(f"/api/menu/cafes/{cafe_id}/categories", json={"name": "E2E Kat"},
+                         headers={"Authorization": f"Bearer {konobar_token}"})
+        check("admin: konobar ne sme kreirati kategoriju -> 403", r.status_code == 403)
+        r = await c.post(f"/api/menu/cafes/{cafe_id}/categories", json={"name": "E2E Kat"})
+        cat = r.json()
+        check("admin: vlasnik kreirao kategoriju", r.status_code == 201 and "id" in cat)
+        r = await c.post(f"/api/menu/cafes/{cafe_id}/items",
+                         json={"category_id": cat["id"], "name": "E2E Piće", "price": 199})
+        it = r.json()
+        check("admin: dodata stavka u kategoriju",
+              r.status_code == 201 and it["price"] == 199)
+        r = await c.delete(f"/api/menu/cafes/{cafe_id}/categories/{cat['id']}")
+        check("admin: brisanje kategorije (i stavki) -> 204", r.status_code == 204)
+
+        # onboarding: kreira nov kafić + vlasnika (javna ruta), pa se očisti
+        import time as _t
+        email = f"e2e_{int(_t.time())}@test.rs"
+        r = await c.post("/api/auth/onboard", json={
+            "cafe_name": "E2E Onboard Kafic", "email": email,
+            "password": "tajna123", "name": "E2E Vlasnik"})
+        ob = r.json()
+        check("admin: onboarding kreirao kafić + vlasnika + token",
+              r.status_code == 201 and ob["user"]["role"] == "vlasnik"
+              and "access_token" in ob and ob["user"]["cafe_id"] != cafe_id)
 
     failed = [r for r in results if not r[1]]
     print(f"\n{'='*50}\nUKUPNO: {len(results)} testova, "

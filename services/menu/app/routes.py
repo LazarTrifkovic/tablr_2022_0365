@@ -1,19 +1,27 @@
 from beanie import PydanticObjectId
 from fastapi import APIRouter, HTTPException, Query
 
+import re
+
+from app.config import settings
 from app.external import currency_rates, suggest_allergens
 from app.models import Cafe, Category, MenuItem, TableSpot
 from app.schemas import (
+    CafeCreate,
     CafeOut,
+    CategoryCreate,
     CategoryOut,
+    CategoryUpdate,
     InternalItem,
     ItemCreate,
     ItemOut,
     ItemUpdate,
     MenuOut,
+    QrLink,
     TablesUpdate,
     TableSpotOut,
 )
+from app.security import table_signature
 
 router = APIRouter()
 
@@ -60,6 +68,75 @@ async def allergens_search(q: str = Query(..., min_length=2, max_length=80)):
     """Predlog alergena za naziv proizvoda (OpenFoodFacts) — pomoć osoblju pri uređivanju.
     Uvek uspeva: ako je OFF nedostupan, vraća praznu listu (available=false)."""
     return await suggest_allergens(q)
+
+
+def _slugify(name: str) -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "kafic"
+    return base[:40]
+
+
+@router.post("/internal/cafes", response_model=CafeOut, status_code=201)
+async def create_cafe(body: CafeCreate):
+    """Kreiranje kafića — interna ruta (poziva auth pri onboardingu). Blokirana na gateway-u."""
+    slug = _slugify(body.name)
+    # slug mora biti jedinstven (unique index) — dodaj sufiks ako je zauzet
+    if await Cafe.find_one(Cafe.slug == slug) is not None:
+        i = 2
+        while await Cafe.find_one(Cafe.slug == f"{slug}-{i}") is not None:
+            i += 1
+        slug = f"{slug}-{i}"
+    cafe = Cafe(name=body.name, slug=slug, address=body.address, currency=body.currency)
+    await cafe.insert()
+    return _cafe_out(cafe)
+
+
+@router.post("/cafes/{cafe_id}/categories", response_model=CategoryOut, status_code=201)
+async def create_category(cafe_id: str, body: CategoryCreate):
+    cafe = await _get_cafe_or_404(cafe_id)
+    count = await Category.find(Category.cafe_id == cafe.id).count()
+    category = Category(cafe_id=cafe.id, name=body.name, sort=count)
+    await category.insert()
+    return CategoryOut(id=str(category.id), name=category.name, items=[])
+
+
+@router.patch("/cafes/{cafe_id}/categories/{category_id}", response_model=CategoryOut)
+async def update_category(cafe_id: str, category_id: str, body: CategoryUpdate):
+    cafe = await _get_cafe_or_404(cafe_id)
+    try:
+        category = await Category.get(PydanticObjectId(category_id))
+    except Exception:
+        category = None
+    if category is None or category.cafe_id != cafe.id:
+        raise HTTPException(status_code=404, detail="Category not found")
+    category.name = body.name
+    await category.save()
+    return CategoryOut(id=str(category.id), name=category.name, items=[])
+
+
+@router.delete("/cafes/{cafe_id}/categories/{category_id}", status_code=204)
+async def delete_category(cafe_id: str, category_id: str):
+    cafe = await _get_cafe_or_404(cafe_id)
+    try:
+        category = await Category.get(PydanticObjectId(category_id))
+    except Exception:
+        category = None
+    if category is None or category.cafe_id != cafe.id:
+        raise HTTPException(status_code=404, detail="Category not found")
+    # briše i sve stavke kategorije
+    await MenuItem.find(MenuItem.category_id == category.id).delete()
+    await category.delete()
+
+
+@router.get("/cafes/{cafe_id}/qr-links", response_model=list[QrLink])
+async def qr_links(cafe_id: str):
+    """Potpisani QR linkovi po stolu — vlasnik ih generiše i štampa. Zaštićeno na gateway-u."""
+    cafe = await _get_cafe_or_404(cafe_id)
+    links = []
+    for t in sorted(cafe.tables, key=lambda s: s.number):
+        sig = table_signature(cafe_id, t.number)
+        url = f"{settings.guest_base_url}/?cafe={cafe_id}&table={t.number}&sig={sig}"
+        links.append(QrLink(table_number=t.number, url=url))
+    return links
 
 
 @router.patch("/cafes/{cafe_id}/tables", response_model=CafeOut)
