@@ -86,7 +86,10 @@
 
 ## Ostalo (iz CLAUDE.md / ranijih odluka)
 - **[Faza 3]** Admin panel (kreiranje kafića, meni CRUD, QR generisanje, statistika).
-- **[Faza 3]** Eksterni API-ji: OpenFoodFacts (alergeni), Frankfurter (valute).
+- ✅ **[Faza 3 — URAĐENO]** Eksterni API-ji: OpenFoodFacts (predlog alergena u bar Meni tabu)
+  + Frankfurter (birač valute kod gosta, ≈ cena). RSD sidro (Frankfurter nema RSD).
+  Ostaje za produkciju: RSD sidro je hardkodovano (117.5) — povezati na pravi izvor kursa;
+  keš je in-memory (nestane na restart).
 - **[Faza 5]** Pun inventar sastojaka (koktel bez limuna…) — *sad samo toggle + napomena.*
 - **[kraj projekta]** Jezički togl SR/EN/RU — *održavanje prevoda tokom razvoja = stalni posao.*
 - **[blokada]** GitHub Classroom repo nije registrovan → nema remote-a/PR-ova/Issues.
