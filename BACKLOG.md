@@ -47,13 +47,13 @@
   gradimo podelu računa (obim M) i ETA — *da ne uložimo trud u nešto što se retko koristi.*
 
 ## Mapa stolova
-- **[Blok 2]** PATCH ruta `/cafes/{id}/tables` + react-rnd editor (prevlačenje/resize) —
-  *čeka Auth JWT (ruta mora biti zaštićena).*
-- **[kozmetika]** Okrugli stolovi se renderuju kao elipse (platno 16:10, w=h=12% ≠ isti
-  broj px) — *sitna CSS ispravka, može uz Blok 2.*
-- **[recenzija]** 3 VAŽNA nalaza za table-spots: nema migracije starih Cafe dokumenata →
-  prazna mapa na perzistentnom volumenu; prazan `tables` renderuje prazan ekran; neki
-  `fetch` bez `.catch`. + Field ograničenja na `TableSpot` — *pre Bloka 2.*
+- ✅ **[Blok 2 — URAĐENO]** Editor rasporeda (vlasnik): PATCH `/cafes/{id}/tables`
+  (vlasnik-only), custom drag/resize platno, panel za broj/zonu/opis/mesta/oblik,
+  dodaj/ukloni sto. Kozmetika okruglih stolova (elipsa→krug) rešena. Field ograničenja
+  na TableSpot dodata (recenzentov nalaz).
+- **[recenzija — ostaje]** Nema migracije starih Cafe dokumenata (prazna mapa na
+  perzistentnom volumenu) i prazan `tables` renderuje prazan ekran — *manje bitno sad jer
+  seed daje stolove; pravo rešenje ide sa Alembic migracijama (v. "Pred kraj").*
 
 ## Bezbednost / Auth (Faza 3)
 - ✅ **[Auth — URAĐENO]** JWT + uloge (vlasnik/konobar); gateway validira token, štiti
