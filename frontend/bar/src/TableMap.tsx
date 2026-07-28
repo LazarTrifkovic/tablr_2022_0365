@@ -1,7 +1,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
+import { authFetch } from "./auth";
 import type { ServiceRequest, Ticket } from "./types";
-
-const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 type TableState = "free" | "busy" | "ready" | "call";
 
@@ -36,7 +35,7 @@ export default function TableMap({ cafeId, tickets, requests, onResolveRequest }
   const [selected, setSelected] = useState<number | null>(null);
 
   useEffect(() => {
-    fetch(`${API}/api/menu/cafes`)
+    authFetch(`/api/menu/cafes`)
       .then((r) => r.json())
       .then((cafes: { id: string; tables: TableSpot[] }[]) => {
         const cafe = cafes.find((c) => c.id === cafeId);

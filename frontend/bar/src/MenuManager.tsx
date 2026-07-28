@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-
-const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+import { authFetch } from "./auth";
 
 interface MenuItem {
   id: string;
@@ -21,14 +20,14 @@ export default function MenuManager({ cafeId }: { cafeId: string }) {
   const [saving, setSaving] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${API}/api/menu/cafes/${cafeId}/menu`)
+    authFetch(`/api/menu/cafes/${cafeId}/menu`)
       .then((r) => r.json())
       .then((menu) => setCategories(menu.categories));
   }, [cafeId]);
 
   const patchItem = async (itemId: string, body: Partial<MenuItem>) => {
     setSaving(itemId);
-    const r = await fetch(`${API}/api/menu/cafes/${cafeId}/items/${itemId}`, {
+    const r = await authFetch(`/api/menu/cafes/${cafeId}/items/${itemId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),

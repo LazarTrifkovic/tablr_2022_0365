@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MenuManager from "./MenuManager";
 import TableMap from "./TableMap";
+import Login from "./Login";
+import { API, authFetch, clearSession, getSession, type StaffUser } from "./auth";
 import { orderSound, requestSound, unlockAudio } from "./sounds";
 import type { HistoryOrder, ServiceRequest, Ticket, WsEvent } from "./types";
 
-const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 const WS_URL = API.replace(/^http/, "ws");
 
 const COLUMNS: { status: string; title: string; action?: { to: string; label: string } }[] = [
@@ -54,22 +55,17 @@ function Stars({ n }: { n: number }) {
 }
 
 export default function App() {
-  const cafeId = useMemo(
-    () => new URLSearchParams(window.location.search).get("cafe"),
-    [],
-  );
-  if (!cafeId) {
-    return (
-      <div className="screen-msg">
-        <h1>tablr bar</h1>
-        <p>Otvorite dashboard sa parametrom kafića: <code>?cafe=&lt;id&gt;</code></p>
-      </div>
-    );
-  }
-  return <BarApp cafeId={cafeId} />;
+  const [user, setUser] = useState<StaffUser | null>(() => getSession()?.user ?? null);
+  if (!user) return <Login onLogin={setUser} />;
+  const logout = () => {
+    clearSession();
+    setUser(null);
+  };
+  return <BarApp user={user} onLogout={logout} />;
 }
 
-function BarApp({ cafeId }: { cafeId: string }) {
+function BarApp({ user, onLogout }: { user: StaffUser; onLogout: () => void }) {
+  const cafeId = user.cafe_id;
   const [tickets, setTickets] = useState<Map<string, Ticket>>(new Map());
   const [requests, setRequests] = useState<Map<string, ServiceRequest>>(new Map());
   const [connected, setConnected] = useState(false);
@@ -96,12 +92,12 @@ function BarApp({ cafeId }: { cafeId: string }) {
   }, []);
 
   const loadTickets = useCallback(async () => {
-    const r = await fetch(`${API}/api/bar/tickets?cafe_id=${cafeId}`);
+    const r = await authFetch(`/api/bar/tickets?cafe_id=${cafeId}`);
     if (r.ok) {
       const list: Ticket[] = await r.json();
       setTickets(new Map(list.map((t) => [t.order_id, t])));
     }
-    const rq = await fetch(`${API}/api/bar/requests?cafe_id=${cafeId}`);
+    const rq = await authFetch(`/api/bar/requests?cafe_id=${cafeId}`);
     if (rq.ok) {
       const list: ServiceRequest[] = await rq.json();
       setRequests(new Map(list.map((q) => [q.id, q])));
@@ -109,7 +105,7 @@ function BarApp({ cafeId }: { cafeId: string }) {
   }, [cafeId]);
 
   const resolveRequest = async (id: string) => {
-    await fetch(`${API}/api/bar/requests/${id}/resolve`, { method: "PATCH" });
+    await authFetch(`/api/bar/requests/${id}/resolve`, { method: "PATCH" });
     // uklanjanje stiže i kroz WS event; lokalno odmah radi responzivnosti
     setRequests((prev) => {
       const next = new Map(prev);
@@ -121,7 +117,7 @@ function BarApp({ cafeId }: { cafeId: string }) {
   // konobar naplaćuje izabrane stavke gosta (keš/kartica na licu mesta) pa rešava zahtev
   const settleSplit = async (q: ServiceRequest, method: string) => {
     if (q.item_ids && q.item_ids.length > 0) {
-      await fetch(`${API}/api/orders/tables/${cafeId}/${q.table_number}/bill/settle`, {
+      await authFetch(`/api/orders/tables/${cafeId}/${q.table_number}/bill/settle`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ order_item_ids: q.item_ids, payment_method: method }),
@@ -178,7 +174,7 @@ function BarApp({ cafeId }: { cafeId: string }) {
   }, [cafeId, loadTickets, upsert]);
 
   const setStatus = async (orderId: string, status: string, paymentMethod?: string) => {
-    const r = await fetch(`${API}/api/bar/tickets/${orderId}/status`, {
+    const r = await authFetch(`/api/bar/tickets/${orderId}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(paymentMethod ? { status, payment_method: paymentMethod } : { status }),
@@ -205,13 +201,21 @@ function BarApp({ cafeId }: { cafeId: string }) {
           <button className={view === "menu" ? "active" : ""} onClick={() => setView("menu")}>
             Meni
           </button>
-          <button className={view === "archive" ? "active" : ""} onClick={() => setView("archive")}>
-            Arhiva
-          </button>
+          {user.role === "vlasnik" && (
+            <button className={view === "archive" ? "active" : ""} onClick={() => setView("archive")}>
+              Arhiva
+            </button>
+          )}
         </div>
-        <span className={`conn ${connected ? "on" : "off"}`}>
-          {connected ? "● uživo" : "○ ponovno povezivanje…"}
-        </span>
+        <div className="header-right">
+          <span className={`conn ${connected ? "on" : "off"}`}>
+            {connected ? "● uživo" : "○ povezivanje…"}
+          </span>
+          <span className="user-badge" title={user.email}>
+            {user.name} · {user.role}
+          </span>
+          <button className="logout-btn" onClick={onLogout}>Odjava</button>
+        </div>
       </header>
       {view === "menu" && <MenuManager cafeId={cafeId} />}
       {view === "archive" && <Archive cafeId={cafeId} />}
@@ -322,7 +326,7 @@ function Archive({ cafeId }: { cafeId: string }) {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    fetch(`${API}/api/orders/orders/history?cafe_id=${cafeId}`)
+    authFetch(`/api/orders/orders/history?cafe_id=${cafeId}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Greška pri učitavanju"))))
       .then(setOrders)
       .catch((e) => setError(e.message));

@@ -1,12 +1,49 @@
 import asyncio
 import contextlib
+import re
 
 import httpx
+import jwt
 import websockets
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+
+# Zaštićene (osoblje) rute: (METOD, servis, regex putanje, potrebna_uloga|None).
+# None = bilo koja prijavljena uloga; "vlasnik" = samo vlasnik. Sve što NIJE ovde je
+# javno (gost preko QR potpisa). Gost i osoblje dele prefikse pa se gleda metod+putanja.
+PROTECTED: list[tuple[str, str, str, str | None]] = [
+    ("GET", "orders", r"^orders/history", "vlasnik"),                # arhiva/pazar → vlasnik
+    ("POST", "auth", r"^register$", "vlasnik"),                      # dodavanje osoblja → vlasnik
+    ("POST", "orders", r"^tables/[^/]+/[^/]+/bill/settle$", None),   # naplata na stolu
+    ("GET", "bar", r"^tickets", None),                              # tabla porudžbina
+    ("PATCH", "bar", r"^tickets/[^/]+/status$", None),              # promena statusa
+    ("GET", "bar", r"^requests", None),                            # lista poziva konobara
+    ("PATCH", "bar", r"^requests/[^/]+/resolve$", None),           # rešavanje poziva
+    ("POST", "menu", r"", None),                                  # meni izmene → osoblje
+    ("PATCH", "menu", r"", None),
+    ("PUT", "menu", r"", None),
+    ("DELETE", "menu", r"", None),
+]
+
+
+def _required_role(method: str, service: str, path: str):
+    """Vraća (zaštićeno, potrebna_uloga|None). zaštićeno=False → javna ruta."""
+    for m, svc, rx, role in PROTECTED:
+        if m == method and svc == service and re.search(rx, path):
+            return True, role
+    return False, None
+
+
+def _verify_jwt(request: Request) -> dict | None:
+    auth = request.headers.get("authorization", "")
+    if not auth.lower().startswith("bearer "):
+        return None
+    try:
+        return jwt.decode(auth[7:], settings.jwt_secret, algorithms=["HS256"])
+    except jwt.PyJWTError:
+        return None
 
 # mapa javnih prefiksa na interne adrese servisa
 ROUTES = {
@@ -68,13 +105,32 @@ async def proxy(service: str, path: str, request: Request) -> Response:
         return Response(status_code=403, content=b'{"detail":"Forbidden"}',
                         media_type="application/json")
 
+    # autentikacija osoblja za zaštićene rute; javne (gost) rute prolaze slobodno
+    protected, need_role = _required_role(request.method, service, path)
+    extra_headers: dict[str, str] = {}
+    if protected:
+        claims = _verify_jwt(request)
+        if claims is None:
+            return Response(status_code=401, content=b'{"detail":"Prijava je obavezna"}',
+                            media_type="application/json")
+        if need_role is not None and claims.get("role") != need_role:
+            return Response(status_code=403, content=b'{"detail":"Nedovoljna prava"}',
+                            media_type="application/json")
+        # prosleđujemo identitet servisu (servisi veruju gateway-u)
+        extra_headers = {
+            "X-User": str(claims.get("sub", "")),
+            "X-Role": str(claims.get("role", "")),
+            "X-Cafe": str(claims.get("cafe_id", "")),
+        }
+
     upstream = await client.request(
         request.method,
         f"{base}/{path}",
         params=request.query_params,
         content=await request.body(),
-        headers={k: v for k, v in request.headers.items()
-                 if k.lower() not in ("host", "content-length")},
+        headers={**{k: v for k, v in request.headers.items()
+                    if k.lower() not in ("host", "content-length")},
+                 **extra_headers},
     )
     return Response(
         content=upstream.content,
