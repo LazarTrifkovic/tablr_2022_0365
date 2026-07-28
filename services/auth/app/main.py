@@ -15,6 +15,7 @@ from app.security import create_token, hash_password, verify_password
 from app.seed import seed_if_empty
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("auth")
 
 
 @asynccontextmanager
@@ -53,12 +54,20 @@ async def login(body: LoginIn, session: AsyncSession = Depends(get_session)):
 
 @app.post("/onboard", response_model=TokenOut, status_code=201)
 async def onboard(body: OnboardIn, session: AsyncSession = Depends(get_session)):
-    """SaaS registracija kafića: kreira kafić (menu servis) + vlasnički nalog, vraća token.
-    Javna ruta — ovako novi vlasnik dobija svoj kafić i nalog u jednom koraku."""
+    """SaaS registracija kafića kao ORKESTRIRANA SAGA (Faza 4).
+
+    Dve lokalne transakcije u dva servisa (odvojene baze → nema zajedničkog rollback-a):
+      Korak 1: menu kreira kafić
+      Korak 2: auth kreira vlasnički nalog
+    auth je 'dirigent': ako Korak 2 padne, pokreće KOMPENZACIJU — briše kafić iz Koraka 1
+    (menu DELETE /internal/cafes/{id}), da ne ostane osirotan kafić bez vlasnika.
+    """
+    # pre-provera: ako je email zauzet, ne diramo menu uopšte (sagu i ne počinjemo)
     exists = await session.execute(select(User).where(User.email == body.email))
     if exists.scalar_one_or_none() is not None:
         raise HTTPException(status_code=409, detail="Email već postoji")
-    # 1) kreiraj kafić u menu servisu (interna ruta)
+
+    # ——— Korak 1: kreiraj kafić (menu servis) ———
     try:
         async with httpx.AsyncClient(timeout=8) as client:
             resp = await client.post(f"{settings.menu_url}/internal/cafes", json={
@@ -66,13 +75,36 @@ async def onboard(body: OnboardIn, session: AsyncSession = Depends(get_session))
             resp.raise_for_status()
             cafe = resp.json()
     except httpx.HTTPError:
+        # Korak 1 pao → ništa nije ni nastalo, nema šta da se kompenzuje
         raise HTTPException(status_code=503, detail="Menu servis nedostupan")
-    # 2) kreiraj vlasnički nalog vezan za taj kafić
-    user = User(cafe_id=cafe["id"], email=body.email,
-                password_hash=hash_password(body.password), role="vlasnik",
-                name=body.name)
-    session.add(user)
-    await session.commit()
+    logger.info("SAGA onboard: Korak 1 OK — kafić %s kreiran", cafe["id"])
+
+    # ——— Korak 2: kreiraj vlasnički nalog; ako padne → KOMPENZUJ Korak 1 ———
+    try:
+        # (dev) namerna injekcija greške za demonstraciju kompenzacije
+        if settings.app_env == "dev" and body.email.split("@", 1)[0] == "saga-fail":
+            raise RuntimeError("injektovana greška Koraka 2 (demo kompenzacije)")
+
+        user = User(cafe_id=cafe["id"], email=body.email,
+                    password_hash=hash_password(body.password), role="vlasnik",
+                    name=body.name)
+        session.add(user)
+        await session.commit()
+    except Exception as exc:  # noqa: BLE001 — bilo koja greška Koraka 2 pokreće kompenzaciju
+        await session.rollback()
+        logger.warning("SAGA onboard: Korak 2 pao (%s) → KOMPENZACIJA: brišem kafić %s",
+                       exc, cafe["id"])
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                await client.delete(f"{settings.menu_url}/internal/cafes/{cafe['id']}")
+            logger.info("SAGA onboard: kompenzacija OK — kafić %s poništen", cafe["id"])
+        except httpx.HTTPError:
+            # kompenzacija sama pala — kafić ostaje osirotan; treba retry/ručno (zabeleži)
+            logger.error("SAGA onboard: KOMPENZACIJA NIJE USPELA za kafić %s — ručna intervencija",
+                         cafe["id"])
+        raise HTTPException(status_code=500, detail="Registracija nije uspela (poništena)")
+
+    logger.info("SAGA onboard: Korak 2 OK — vlasnik %s; saga uspešna", user.email)
     token = create_token(user_id=str(user.id), email=user.email, role=user.role,
                          cafe_id=user.cafe_id, name=user.name)
     return TokenOut(access_token=token, user=_user_out(user))
