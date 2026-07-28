@@ -14,8 +14,9 @@
   **CorvusPay** (regionalni, nije vezan za jednu banku); Monri/WSPay (Google Pay potvrđen,
   Apple Pay proveriti). **Stripe ISKLJUČEN** — Srbija nije podržana zemlja (Stripe TEST može
   samo kao demo). *Traži registrovanu firmu + ugovor sa PSP-om — odluka posle firme/pilota.*
-  Detalji: `2026-07-28-online-placanje-apple-pay.md` (+ veliki produkcijski izveštaj
-  `2026-07-28-placanje-produkcija-srbija-detaljno.md`, u izradi).
+  Detalji: `2026-07-28-online-placanje-apple-pay.md` + **veliki produkcijski referentni
+  izveštaj `2026-07-28-placanje-produkcija-srbija-detaljno.md`** (svi PSP-ovi u RS, cene,
+  IPS, pravni/administrativni checklist korak-po-korak, fiskalizacija — čitati pred pilot).
 - **[Krug 3]** **Apple Pay** — preskočeno: traži plaćen Apple Developer (99 USD/god) + Apple
   uređaj čak i za web sandbox; za ispit nepotrebno, za produkciju stiže preko PSP-a (RaiAccept).
 - **[Krug 3]** Baksiš (napojnica) uz online karticu — *ide zajedno sa pravim online plaćanjem;
@@ -59,6 +60,25 @@
   `taken_by` statistiku.*
 - **[Auth]** Zaključati iza Auth-a: arhiva (pokazuje pazar), settle ruta (naplata),
   admin rute — *sad su otvorene kao i ceo dashboard.*
+
+## 🏁 Pred kraj projekta / pre produkcije (obavezne izmene — dev-prečice koje se moraju srediti)
+> Ovo su svesne prečice iz razvoja koje su OK za ispit/demo ali NE smeju u pravi kafić.
+> Kad dođe vreme za pilot/produkciju, proći celu ovu listu.
+- **[bezbednost — KRITIČNO]** `QR_SECRET = "dev-secret-change-in-prod"` je hardkodovan u
+  `docker-compose.yml` (menu/barkds/orders/payments) — *mora postati pravi tajni ključ iz
+  env/secret menadžera; sa ovim ključem bilo ko može da falsifikuje QR potpis stola.*
+- **[migracije — KRITIČNO]** Šema baze se u dev-u menja preko **reset volume-a** (SQLAlchemy
+  `create_all` ne dodaje kolone) — *produkcija ne sme da gubi podatke; uvesti prave migracije
+  (Alembic) pre nego što u bazi bude stvarnih porudžbina.*
+- **[bezbednost]** Rute bez zaštite: `bill/settle` (naplata), arhiva (pazar), `payments/pay`,
+  admin rute — *zaključati iza Auth JWT (već i u sekciji Auth). Sad su otvorene kao ceo dashboard.*
+- **[plaćanje]** Google Pay je **TEST env** + `payments/pay` samo prihvata token — *za produkciju
+  pravi PSP (RaiAccept/CorvusPay/PaySpot) + fiskalizacija (v. sekcija Plaćanje + veliki izveštaj).*
+- **[demo podaci]** Seed „Kafić Panorama" + demo meni se ubacuje u praznu bazu; `/dev/sign`
+  ruta postoji u orders (blokirana na gateway-u) — *za produkciju: ukloniti/ograditi seed i sve
+  `/dev` rute, ne isporučivati demo kafić.*
+- **[kozmetika]** Okrugli stolovi se renderuju kao elipse (v. Mapa stolova) — *sitna CSS ispravka.*
+- **[i18n]** Jezički togl SR/EN/RU — *tek na samom kraju (održavanje prevoda tokom razvoja = stalni posao).*
 
 ## Ostalo (iz CLAUDE.md / ranijih odluka)
 - **[Faza 3]** Admin panel (kreiranje kafića, meni CRUD, QR generisanje, statistika).
