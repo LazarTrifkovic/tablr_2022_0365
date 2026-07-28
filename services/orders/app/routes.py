@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.breaker import CircuitBreaker, CircuitOpenError
 from app.config import settings
 from app.db import get_session
 from app.events import publish_order_event
@@ -20,6 +21,9 @@ DELIVERED_VISIBLE = timedelta(hours=3)
 
 logger = logging.getLogger("orders")
 router = APIRouter()
+
+# prekidač za sinhroni poziv ka menu servisu (validacija cena pri poručivanju)
+menu_breaker = CircuitBreaker("menu", fail_max=3, reset_timeout=10)
 
 
 def _order_out(order: Order) -> OrderOut:
@@ -84,17 +88,27 @@ async def create_order(body: OrderCreate, session: AsyncSession = Depends(get_se
     if not verify_table_signature(body.cafe_id, body.table_number, body.sig):
         raise HTTPException(status_code=403, detail="Invalid table signature")
 
-    # validacija stavki kroz menu servis (cena se NIKAD ne prima od klijenta)
+    # validacija stavki kroz menu servis (cena se NIKAD ne prima od klijenta).
+    # Poziv ide kroz Circuit Breaker: ako menu padne, posle par grešaka prekidač se
+    # otvori i naredne porudžbine se odbijaju ODMAH (bez čekanja) dok se menu ne oporavi.
     ids = ",".join(i.item_id for i in body.items)
-    try:
+
+    async def _fetch_catalog() -> list[dict]:
         async with httpx.AsyncClient(timeout=5) as client:
             resp = await client.get(f"{settings.menu_url}/internal/items",
                                     params={"ids": ids})
             resp.raise_for_status()
+            return resp.json()
+
+    try:
+        catalog_items = await menu_breaker.call(_fetch_catalog)
+    except CircuitOpenError:
+        raise HTTPException(status_code=503,
+                            detail="Meni privremeno nedostupan (prekidač otvoren)")
     except httpx.HTTPError:
         raise HTTPException(status_code=503, detail="Menu service unavailable")
 
-    catalog = {item["id"]: item for item in resp.json()}
+    catalog = {item["id"]: item for item in catalog_items}
     order_items: list[OrderItem] = []
     total = 0
     for requested in body.items:

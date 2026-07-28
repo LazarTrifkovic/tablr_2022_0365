@@ -4,11 +4,15 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from app.breaker import CircuitBreaker, CircuitOpenError
 from app.config import settings
 from app.security import verify_table_signature
 
 logger = logging.getLogger("payments")
 app = FastAPI(title="Tablr Payments Service")
+
+# prekidač za sinhroni poziv ka orders servisu (obeležavanje stavki plaćenim)
+orders_breaker = CircuitBreaker("orders", fail_max=3, reset_timeout=10)
 
 
 class PayIn(BaseModel):
@@ -42,14 +46,21 @@ async def pay(body: PayIn):
     logger.info("DEMO naplata: sto %s, iznos %s RSD, stavke %s",
                 body.table_number, body.amount, body.order_item_ids)
 
-    # naplaćeno → orders obeležava stavke plaćenim (servis-servis, interna mreža)
-    try:
+    # naplaćeno → orders obeležava stavke plaćenim (servis-servis, kroz Circuit Breaker)
+    async def _settle() -> httpx.Response:
         async with httpx.AsyncClient(timeout=5) as client:
             resp = await client.post(
                 f"{settings.orders_url}/tables/{body.cafe_id}/{body.table_number}/bill/settle",
                 json={"order_item_ids": body.order_item_ids, "payment_method": "card"},
             )
             resp.raise_for_status()
+            return resp
+
+    try:
+        resp = await orders_breaker.call(_settle)
+    except CircuitOpenError:
+        raise HTTPException(status_code=503,
+                            detail="Naplata privremeno nedostupna (prekidač otvoren)")
     except httpx.HTTPError:
         raise HTTPException(status_code=502, detail="Orders service unavailable")
 

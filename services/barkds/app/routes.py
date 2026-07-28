@@ -6,6 +6,7 @@ from beanie import PydanticObjectId
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
+from app.breaker import CircuitBreaker, CircuitOpenError
 from app.config import settings
 from app.models import ServiceRequest, Ticket, TicketItem
 from app.security import verify_table_signature
@@ -13,6 +14,9 @@ from app.ws import manager
 
 logger = logging.getLogger("barkds")
 router = APIRouter()
+
+# prekidač za sinhroni poziv ka orders servisu (validacija tranzicije statusa)
+orders_breaker = CircuitBreaker("orders", fail_max=3, reset_timeout=10)
 
 ACTIVE_STATUSES = ["CREATED", "ACCEPTED", "READY"]
 
@@ -114,16 +118,25 @@ async def update_status(order_id: str, body: StatusUpdate):
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket not found")
 
-    # orders servis je vlasnik status mašine — on validira tranziciju
-    try:
+    # orders servis je vlasnik status mašine — on validira tranziciju.
+    # Poziv ide kroz Circuit Breaker; VAŽNO: 409 (nevalidna tranzicija) je legitiman
+    # odgovor zdravog orders-a, pa NE koristimo raise_for_status unutar prekidača —
+    # prekidač broji samo transport greške (orders nedostupan), ne poslovne odbijenice.
+    async def _patch_status() -> httpx.Response:
         async with httpx.AsyncClient(timeout=5) as client:
             payload: dict = {"status": body.status}
             if body.payment_method:
                 payload["payment_method"] = body.payment_method
-            resp = await client.patch(
+            return await client.patch(
                 f"{settings.orders_url}/internal/orders/{order_id}/status",
                 json=payload,
             )
+
+    try:
+        resp = await orders_breaker.call(_patch_status)
+    except CircuitOpenError:
+        raise HTTPException(status_code=503,
+                            detail="Orders privremeno nedostupan (prekidač otvoren)")
     except httpx.HTTPError:
         raise HTTPException(status_code=503, detail="Orders service unavailable")
     if resp.status_code != 200:
