@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MenuManager from "./MenuManager";
 import TableMap from "./TableMap";
+import TableMapEditor from "./TableMapEditor";
 import Login from "./Login";
 import { API, authFetch, clearSession, getSession, type StaffUser } from "./auth";
 import { orderSound, requestSound, unlockAudio } from "./sounds";
@@ -71,6 +72,8 @@ function BarApp({ user, onLogout }: { user: StaffUser; onLogout: () => void }) {
   const [connected, setConnected] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [view, setView] = useState<"board" | "map" | "menu" | "archive">("board");
+  const [editingMap, setEditingMap] = useState(false);
+  const [mapKey, setMapKey] = useState(0); // menja se posle snimanja da živa mapa refetch-uje
   const wsRef = useRef<WebSocket | null>(null);
 
   // jedan otkucaj u sekundi — živi mm:ss tajmeri na tiketima
@@ -220,14 +223,34 @@ function BarApp({ user, onLogout }: { user: StaffUser; onLogout: () => void }) {
       {view === "menu" && <MenuManager cafeId={cafeId} />}
       {view === "archive" && <Archive cafeId={cafeId} />}
       {view === "map" && (
-        <TableMap
-          cafeId={cafeId}
-          tickets={[...tickets.values()].filter((t) =>
-            ["CREATED", "ACCEPTED", "READY"].includes(t.status),
-          )}
-          requests={[...requests.values()]}
-          onResolveRequest={resolveRequest}
-        />
+        editingMap ? (
+          <TableMapEditor
+            cafeId={cafeId}
+            onDone={(saved) => {
+              setEditingMap(false);
+              if (saved) setMapKey((k) => k + 1); // osveži živu mapu novim rasporedom
+            }}
+          />
+        ) : (
+          <>
+            {user.role === "vlasnik" && (
+              <div className="map-editbar">
+                <button className="map-edit-btn" onClick={() => setEditingMap(true)}>
+                  ✏️ Uredi raspored
+                </button>
+              </div>
+            )}
+            <TableMap
+              key={mapKey}
+              cafeId={cafeId}
+              tickets={[...tickets.values()].filter((t) =>
+                ["CREATED", "ACCEPTED", "READY"].includes(t.status),
+              )}
+              requests={[...requests.values()]}
+              onResolveRequest={resolveRequest}
+            />
+          </>
+        )
       )}
       {view === "board" && (
       <>{/* tabla porudžbina */}

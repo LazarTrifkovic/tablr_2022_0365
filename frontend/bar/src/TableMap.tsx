@@ -94,7 +94,8 @@ export default function TableMap({ cafeId, tickets, requests, onResolveRequest }
               left: `${t.x}%`,
               top: `${t.y}%`,
               width: `${t.w}%`,
-              height: `${t.h}%`,
+              // visina prati širinu u PIKSELIMA (aspect-ratio u CSS) → krug ostaje krug,
+              // ne elipsa, bez obzira na 16:10 platno
             }),
           )}
         </div>

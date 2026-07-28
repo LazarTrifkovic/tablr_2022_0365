@@ -2,7 +2,7 @@ from beanie import PydanticObjectId
 from fastapi import APIRouter, HTTPException, Query
 
 from app.external import currency_rates, suggest_allergens
-from app.models import Cafe, Category, MenuItem
+from app.models import Cafe, Category, MenuItem, TableSpot
 from app.schemas import (
     CafeOut,
     CategoryOut,
@@ -11,6 +11,7 @@ from app.schemas import (
     ItemOut,
     ItemUpdate,
     MenuOut,
+    TablesUpdate,
     TableSpotOut,
 )
 
@@ -59,6 +60,19 @@ async def allergens_search(q: str = Query(..., min_length=2, max_length=80)):
     """Predlog alergena za naziv proizvoda (OpenFoodFacts) — pomoć osoblju pri uređivanju.
     Uvek uspeva: ako je OFF nedostupan, vraća praznu listu (available=false)."""
     return await suggest_allergens(q)
+
+
+@router.patch("/cafes/{cafe_id}/tables", response_model=CafeOut)
+async def update_tables(cafe_id: str, body: TablesUpdate):
+    """Vlasnik snima raspored stolova (editor mape). Zamenjuje celu listu stolova.
+    Zaštićeno na gateway-u (samo vlasnik). Brojevi stolova moraju biti jedinstveni."""
+    cafe = await _get_cafe_or_404(cafe_id)
+    numbers = [t.number for t in body.tables]
+    if len(numbers) != len(set(numbers)):
+        raise HTTPException(status_code=400, detail="Brojevi stolova moraju biti jedinstveni")
+    cafe.tables = [TableSpot(**t.model_dump()) for t in body.tables]
+    await cafe.save()
+    return _cafe_out(cafe)
 
 
 @router.get("/cafes/{cafe_id}/menu", response_model=MenuOut)
