@@ -1,6 +1,7 @@
 from beanie import PydanticObjectId
 from fastapi import APIRouter, HTTPException, Query
 
+from app.external import currency_rates, suggest_allergens
 from app.models import Cafe, Category, MenuItem
 from app.schemas import (
     CafeOut,
@@ -43,6 +44,21 @@ async def _get_cafe_or_404(cafe_id: str) -> Cafe:
 @router.get("/cafes", response_model=list[CafeOut])
 async def list_cafes():
     return [_cafe_out(c) for c in await Cafe.find_all().to_list()]
+
+
+@router.get("/fx")
+async def fx():
+    """Kursevi za prikaz cena gostu u stranoj valuti (Frankfurter + RSD sidro).
+    Vraća koliko RSD vredi 1 jedinica svake valute — gost deli cenu tim brojem.
+    Uvek uspeva: ako je Frankfurter nedostupan, vraća rezervne kurseve (fresh=false)."""
+    return await currency_rates()
+
+
+@router.get("/allergens/search")
+async def allergens_search(q: str = Query(..., min_length=2, max_length=80)):
+    """Predlog alergena za naziv proizvoda (OpenFoodFacts) — pomoć osoblju pri uređivanju.
+    Uvek uspeva: ako je OFF nedostupan, vraća praznu listu (available=false)."""
+    return await suggest_allergens(q)
 
 
 @router.get("/cafes/{cafe_id}/menu", response_model=MenuOut)

@@ -13,6 +13,7 @@ import {
   type TableCtx,
 } from "./api";
 import GooglePayButton from "./GooglePay";
+import { useCurrency } from "./currency";
 import { STATUS_LABELS, type Bill, type Menu, type Order } from "./types";
 
 type Cart = Record<string, number>;
@@ -38,6 +39,7 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
   const [sending, setSending] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
   const [tab, setTab] = useState<"menu" | "orders" | "racun">("menu");
+  const currency = useCurrency();
   // cooldown po vrsti zahteva — sprečava spamovanje konobara
   const [cooldown, setCooldown] = useState<Record<string, boolean>>({});
   const [cancelMsg, setCancelMsg] = useState<string | null>(null);
@@ -127,6 +129,16 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
         <div>
           <h1>{menu.cafe.name}</h1>
           <span className="table-badge">Sto {ctx.table}</span>
+          <select
+            className="cur-select"
+            value={currency.selected}
+            onChange={(e) => currency.setSelected(e.target.value)}
+            title="Prikaz cena u valuti"
+          >
+            {currency.options.map((c) => (
+              <option key={c} value={c}>{c}</option>
+            ))}
+          </select>
         </div>
         <div className="staff-btns">
           <button disabled={cooldown["waiter"]} onClick={() => callStaff("waiter")}>
@@ -166,6 +178,9 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
                   </div>
                   <div className="item-side">
                     <span className="price">{item.price} din</span>
+                    {currency.convert(item.price) && (
+                      <span className="price-alt">{currency.convert(item.price)}</span>
+                    )}
                     {item.available ? (
                       <div className="qty">
                         <button onClick={() => changeQty(item.id, -1)}>−</button>
@@ -225,6 +240,7 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
           />
           <button className="order-btn" disabled={sending} onClick={placeOrder}>
             {sending ? "Šaljem…" : `Poruči · ${total} din`}
+            {currency.convert(total) && <em className="btn-alt"> {currency.convert(total)}</em>}
           </button>
           {error && <small className="err">{error}</small>}
         </footer>

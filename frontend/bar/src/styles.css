@@ -63,21 +63,41 @@ header h1 span { color: #e8632c; }
   color: #9a958a; margin: 16px 4px 8px;
 }
 .mm-item {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 12px;
   background: #201f1b; border-radius: 10px; padding: 10px 14px; margin-bottom: 6px;
 }
 .mm-item.mm-off { opacity: .55; }
 .mm-item strong { min-width: 210px; font-size: 15px; }
-.mm-item input {
-  flex: 1; background: #2b2a25; border: 1px solid #3a3831; color: #f0ede7;
+.mm-item > input {
+  flex: 1; min-width: 180px; background: #2b2a25; border: 1px solid #3a3831; color: #f0ede7;
   border-radius: 8px; padding: 8px 12px; font-size: 13px;
 }
-.mm-item button {
+.mm-item > button.avail, .mm-item > button.unavail {
   min-width: 90px; border: none; border-radius: 8px; padding: 9px 0;
   font-weight: 700; cursor: pointer; font-size: 14px;
 }
-.mm-item button.avail { background: #1e4620; color: #8fd39a; }
-.mm-item button.unavail { background: #4a1f1f; color: #ff9b9b; }
+.mm-item > button.avail { background: #1e4620; color: #8fd39a; }
+.mm-item > button.unavail { background: #4a1f1f; color: #ff9b9b; }
+
+/* alergeni po stavci (OpenFoodFacts predlog) */
+.mm-allergens {
+  flex-basis: 100%; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  padding-top: 8px; border-top: 1px solid #2b2a25;
+}
+.mm-alabel { font-size: 12px; color: #9a958a; text-transform: uppercase; letter-spacing: .5px; }
+.mm-none { font-size: 12px; color: #6b665c; }
+.chip {
+  background: #35332d; color: #d9d3c7; border: none; border-radius: 999px;
+  padding: 4px 10px; font-size: 12px; cursor: pointer;
+}
+.chip:hover { background: #45423a; }
+.chip-add { background: #1e3a46; color: #8fcfe0; }
+.chip-add:hover { background: #274b5c; }
+.mm-suggest {
+  background: transparent; border: 1px dashed #4a473f; color: #cfc9bd;
+  border-radius: 999px; padding: 4px 12px; font-size: 12px; cursor: pointer;
+}
+.mm-suggest:hover { background: #2b2a25; }
 
 /* mapa stolova */
 .map-canvas {

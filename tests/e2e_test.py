@@ -361,6 +361,23 @@ async def main() -> int:
         check("payments: racun stola posle online placanja = 0",
               r.json()["remaining"] == 0, f"remaining={r.json()['remaining']}")
 
+        # 16. eksterni API-ji (Frankfurter kursevi + OpenFoodFacts alergeni)
+        r = await c.get("/api/menu/fx")
+        fx = r.json()
+        curs = {x["currency"] for x in fx.get("rates", [])}
+        check("eksterni: Frankfurter kursevi (EUR/USD, RSD baza)",
+              r.status_code == 200 and fx.get("base") == "RSD"
+              and "EUR" in curs and "USD" in curs
+              and all(x["rsd_per_unit"] > 0 for x in fx["rates"]),
+              f"valute={sorted(curs)} fresh={fx.get('fresh')}")
+
+        r = await c.get("/api/menu/allergens/search", params={"q": "cappuccino"})
+        al = r.json()
+        check("eksterni: OpenFoodFacts predlog alergena",
+              r.status_code == 200 and "allergens" in al
+              and isinstance(al["allergens"], list),
+              f"matched={al.get('matched_product')} → {al.get('allergens')}")
+
     failed = [r for r in results if not r[1]]
     print(f"\n{'='*50}\nUKUPNO: {len(results)} testova, "
           f"{len(results)-len(failed)} proslo, {len(failed)} palo")
