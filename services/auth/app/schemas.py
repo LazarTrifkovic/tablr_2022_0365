@@ -26,3 +26,12 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserOut
+
+
+class OnboardIn(BaseModel):
+    """Registracija novog kafića: kreira kafić + vlasnički nalog i vraća token."""
+    cafe_name: str = Field(min_length=1, max_length=120)
+    address: str | None = Field(default=None, max_length=200)
+    email: EmailStr
+    password: str = Field(min_length=6, max_length=200)
+    name: str = Field(min_length=1, max_length=80)

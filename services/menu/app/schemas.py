@@ -64,6 +64,26 @@ class MenuOut(BaseModel):
     categories: list[CategoryOut]
 
 
+class CafeCreate(BaseModel):
+    """Kreiranje novog kafića (onboarding — poziva auth servis interno)."""
+    name: str = Field(min_length=1, max_length=120)
+    address: str | None = Field(default=None, max_length=200)
+    currency: str = Field(default="RSD", max_length=8)
+
+
+class CategoryCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+
+class CategoryUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+
+class QrLink(BaseModel):
+    table_number: int
+    url: str
+
+
 class ItemCreate(BaseModel):
     category_id: str
     name: str = Field(min_length=1, max_length=120)

@@ -16,16 +16,19 @@ from app.config import settings
 PROTECTED: list[tuple[str, str, str, str | None]] = [
     ("GET", "orders", r"^orders/history", "vlasnik"),                # arhiva/pazar → vlasnik
     ("POST", "auth", r"^register$", "vlasnik"),                      # dodavanje osoblja → vlasnik
+    ("GET", "auth", r"^cafes/[^/]+/staff$", "vlasnik"),             # lista osoblja → vlasnik
     ("POST", "orders", r"^tables/[^/]+/[^/]+/bill/settle$", None),   # naplata na stolu
     ("GET", "bar", r"^tickets", None),                              # tabla porudžbina
     ("PATCH", "bar", r"^tickets/[^/]+/status$", None),              # promena statusa
     ("GET", "bar", r"^requests", None),                            # lista poziva konobara
     ("PATCH", "bar", r"^requests/[^/]+/resolve$", None),           # rešavanje poziva
     ("PATCH", "menu", r"^cafes/[^/]+/tables$", "vlasnik"),         # raspored stolova → vlasnik
-    ("POST", "menu", r"", None),                                  # meni izmene → osoblje
-    ("PATCH", "menu", r"", None),
-    ("PUT", "menu", r"", None),
-    ("DELETE", "menu", r"", None),
+    ("GET", "menu", r"^cafes/[^/]+/qr-links$", "vlasnik"),         # QR linkovi → vlasnik
+    ("PATCH", "menu", r"^cafes/[^/]+/items/[^/]+$", None),         # dostupnost stavke → osoblje
+    ("POST", "menu", r"", "vlasnik"),                             # kreiranje (kategorije/stavke) → vlasnik
+    ("PATCH", "menu", r"", "vlasnik"),                            # ostale izmene menija → vlasnik
+    ("PUT", "menu", r"", "vlasnik"),
+    ("DELETE", "menu", r"", "vlasnik"),
 ]
 
 

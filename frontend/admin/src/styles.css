@@ -1,0 +1,129 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #171613; color: #f0ede7; min-height: 100vh;
+}
+
+/* prijava / onboarding */
+.login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.login-card {
+  background: #201f1b; border: 1px solid #2b2a25; border-radius: 16px;
+  padding: 28px 24px; width: 100%; max-width: 380px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.login-card h1 { font-size: 26px; text-align: center; }
+.login-card h1 span, .admin h1 span { color: #e8632c; }
+.mode-tabs { display: flex; gap: 6px; }
+.mode-tabs button {
+  flex: 1; background: #171613; color: #9a958a; border: 1px solid #3a3833;
+  border-radius: 8px; padding: 9px; font-weight: 600; cursor: pointer;
+}
+.mode-tabs button.on { background: #e8632c; color: #fff; border-color: #e8632c; }
+.login-card input {
+  background: #171613; border: 1px solid #3a3833; color: #f0ede7;
+  border-radius: 10px; padding: 12px 14px; font-size: 15px;
+}
+.login-card input:focus { outline: none; border-color: #e8632c; }
+.login-card > button {
+  background: #e8632c; color: #fff; border: none; border-radius: 10px;
+  padding: 13px; font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.login-card > button:disabled { opacity: .6; }
+.login-err { color: #ff6b6b; font-size: 14px; text-align: center; }
+.login-demo { color: #6b665c; font-size: 12px; text-align: center; }
+.login-demo code { background: #2b2a25; padding: 1px 6px; border-radius: 5px; color: #cfc9bd; }
+
+/* shell */
+.admin { max-width: 1000px; margin: 0 auto; padding: 16px; }
+.admin header { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.admin header h1 { font-size: 22px; }
+.admin nav { display: flex; gap: 6px; }
+.admin nav button {
+  background: #2b2a25; color: #9a958a; border: none; border-radius: 8px;
+  padding: 8px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.admin nav button.on { background: #e8632c; color: #fff; }
+.a-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.a-cafe { font-weight: 700; }
+.a-user { color: #9a958a; font-size: 14px; }
+.a-logout {
+  background: transparent; border: 1px solid #3a3833; color: #9a958a;
+  border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+}
+.a-err { color: #ff6b6b; margin: 8px 0; }
+.a-ok { color: #6ee7a0; margin: 8px 0; }
+.a-empty { color: #6b665c; text-align: center; margin-top: 30px; }
+
+/* meni CRUD */
+.add-cat { display: flex; gap: 8px; margin-bottom: 18px; }
+.add-cat input {
+  flex: 1; background: #201f1b; border: 1px solid #3a3833; color: #f0ede7;
+  border-radius: 8px; padding: 10px 14px; font-size: 14px;
+}
+.add-cat button, .a-additem button, .staff-add button, .qr-toolbar button {
+  background: #e8632c; color: #fff; border: none; border-radius: 8px;
+  padding: 10px 16px; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.a-cat { background: #201f1b; border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+.a-cat-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.a-cat-name {
+  flex: 1; background: transparent; border: none; color: #f0ede7;
+  font-size: 17px; font-weight: 700; border-bottom: 1px dashed transparent;
+}
+.a-cat-name:focus { outline: none; border-bottom-color: #4a473f; }
+.a-del {
+  background: #2b2a25; color: #ff9b9b; border: none; border-radius: 7px;
+  padding: 6px 10px; font-size: 13px; cursor: pointer;
+}
+.a-item { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px solid #2b2a25; }
+.a-item.off { opacity: .5; }
+.a-iname { flex: 1; font-size: 15px; }
+.a-price { width: 80px; background: #2b2a25; border: 1px solid #3a3833; color: #f0ede7; border-radius: 6px; padding: 6px 8px; text-align: right; }
+.a-din { color: #9a958a; font-size: 13px; }
+.a-on { background: #1e4620; color: #8fd39a; border: none; border-radius: 7px; padding: 6px 12px; font-weight: 700; cursor: pointer; }
+.a-offbtn { background: #4a1f1f; color: #ff9b9b; border: none; border-radius: 7px; padding: 6px 12px; font-weight: 700; cursor: pointer; }
+.a-additem { display: flex; gap: 8px; margin-top: 10px; }
+.a-additem input { background: #171613; border: 1px solid #3a3833; color: #f0ede7; border-radius: 7px; padding: 8px 10px; font-size: 13px; }
+.a-additem input:first-child { flex: 1; }
+.a-additem input[type=number] { width: 90px; }
+
+/* QR */
+.qr-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; }
+.qr-toolbar p { color: #9a958a; }
+.qr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
+.qr-card {
+  background: #fff; color: #111; border-radius: 12px; padding: 14px;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.qr-card strong { font-size: 15px; }
+.qr-table { font-size: 20px; font-weight: 800; color: #e8632c; }
+.qr-card img { width: 100%; max-width: 200px; height: auto; }
+.qr-ph { width: 180px; height: 180px; display: flex; align-items: center; justify-content: center; color: #aaa; }
+.qr-card small { color: #666; font-size: 12px; }
+
+/* osoblje */
+.staff-page { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
+.staff-list h3, .staff-add h3 { margin-bottom: 12px; }
+.staff-row { display: flex; align-items: center; gap: 12px; background: #201f1b; border-radius: 9px; padding: 10px 14px; margin-bottom: 8px; }
+.s-name { font-weight: 600; }
+.s-role { font-size: 12px; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .5px; }
+.s-vlasnik { background: #4a3410; color: #f0b429; }
+.s-konobar { background: #2b2a25; color: #9a958a; }
+.s-email { margin-left: auto; color: #9a958a; font-size: 13px; }
+.staff-add { background: #201f1b; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.staff-add input, .staff-add select {
+  background: #171613; border: 1px solid #3a3833; color: #f0ede7;
+  border-radius: 8px; padding: 10px 12px; font-size: 14px;
+}
+
+@media (max-width: 720px) {
+  .staff-page { grid-template-columns: 1fr; }
+}
+
+/* štampa QR-a: sakrij UI, prikaži samo kartice */
+@media print {
+  body { background: #fff; }
+  .no-print { display: none !important; }
+  .qr-grid { grid-template-columns: repeat(2, 1fr); gap: 20px; }
+  .qr-card { border: 1px solid #ccc; break-inside: avoid; }
+}
