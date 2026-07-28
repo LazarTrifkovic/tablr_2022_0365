@@ -121,3 +121,26 @@ section h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 1px;
   padding: 12px; font-size: 15px; font-weight: 700; cursor: pointer;
 }
 .rate-send:disabled { opacity: .6; }
+
+/* račun + podela */
+.bill { background: #fff; border-radius: 12px; padding: 8px 6px 14px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.bill-items { list-style: none; }
+.bill-items li { border-bottom: 1px solid #f0ece3; }
+.bill-items li:last-child { border-bottom: none; }
+.bill-items label {
+  display: flex; align-items: center; gap: 10px; padding: 12px 10px;
+  cursor: pointer; font-size: 15px;
+}
+.bill-items li.paid label { cursor: default; color: #b3ad9f; }
+.bill-items li.paid .bi-name { text-decoration: line-through; }
+.bill-items li.sel { background: #fff4ee; }
+.bill-items input[type="checkbox"] { width: 20px; height: 20px; accent-color: #e8632c; }
+.bi-name { flex: 1; }
+.bi-name em { font-style: normal; font-size: 12px; color: #6b6559; }
+.bi-price { font-weight: 700; white-space: nowrap; }
+.bill-totals { padding: 10px 12px; border-top: 2px solid #f0ece3; margin-top: 4px; }
+.bt-row { display: flex; justify-content: space-between; padding: 3px 0; color: #6b6559; }
+.bt-row.total { font-size: 18px; font-weight: 800; color: #1a1a1a; }
+.bill .order-btn { margin: 12px 10px 0; width: calc(100% - 20px); }
+.bill-hint { display: block; text-align: center; color: #b3ad9f; margin-top: 10px; }
+.ok { color: #166534; display: block; text-align: center; margin-top: 8px; }

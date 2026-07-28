@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  fetchBill,
   fetchMenu,
   fetchTableOrders,
   readTableCtx,
+  requestBillSplit,
   sendRequest,
   submitOrder,
   submitRating,
   type TableCtx,
 } from "./api";
-import { STATUS_LABELS, type Menu, type Order } from "./types";
+import { STATUS_LABELS, type Bill, type Menu, type Order } from "./types";
 
 type Cart = Record<string, number>;
 
@@ -32,7 +34,7 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [tab, setTab] = useState<"menu" | "orders">("menu");
+  const [tab, setTab] = useState<"menu" | "orders" | "racun">("menu");
   // cooldown po vrsti zahteva — sprečava spamovanje konobara
   const [cooldown, setCooldown] = useState<Record<string, boolean>>({});
 
@@ -116,7 +118,7 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
             {cooldown["waiter"] ? "✓ Pozvano" : "🔔 Pozovi konobara"}
           </button>
           <button disabled={cooldown["bill"]} onClick={() => callStaff("bill")}>
-            {cooldown["bill"] ? "✓ Traženo" : "🧾 Račun"}
+            {cooldown["bill"] ? "✓ Traženo" : "🧾 Traži račun"}
           </button>
         </div>
         <nav>
@@ -125,6 +127,9 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
           </button>
           <button className={tab === "orders" ? "active" : ""} onClick={() => setTab("orders")}>
             Porudžbine {orders.length > 0 && <em>{orders.length}</em>}
+          </button>
+          <button className={tab === "racun" ? "active" : ""} onClick={() => setTab("racun")}>
+            Račun
           </button>
         </nav>
       </header>
@@ -186,6 +191,8 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
           ))}
         </main>
       )}
+
+      {tab === "racun" && <BillView ctx={ctx} />}
 
       {tab === "menu" && cartEntries.length > 0 && (
         <footer className="cart-bar">
@@ -274,5 +281,121 @@ function RatingBlock({
       )}
       {err && <small className="err">{err}</small>}
     </div>
+  );
+}
+
+function BillView({ ctx }: { ctx: TableCtx }) {
+  const [bill, setBill] = useState<Bill | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const load = useCallback(() => {
+    fetchBill(ctx).then(setBill).catch((e) => setError(e.message));
+  }, [ctx]);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 5000); // plaćene stavke otpadaju kad konobar naplati
+    return () => clearInterval(t);
+  }, [load]);
+
+  const toggle = (id: number) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+
+  if (error) return <main><p className="empty">⚠️ {error}</p></main>;
+  if (!bill) return <main><p className="empty">Učitavanje računa…</p></main>;
+  if (bill.items.length === 0)
+    return <main><p className="empty">Nema stavki na računu za ovaj sto.</p></main>;
+
+  const selectedItems = bill.items.filter(
+    (i) => selected.has(i.order_item_id) && !i.paid,
+  );
+  const selectedTotal = selectedItems.reduce((sum, i) => sum + i.line_total, 0);
+
+  const callSplit = async () => {
+    if (selectedItems.length === 0) return;
+    setSending(true);
+    setError(null);
+    try {
+      const detail = selectedItems.map((i) => `${i.qty}× ${i.name}`).join(", ");
+      await requestBillSplit(
+        ctx,
+        selectedItems.map((i) => i.order_item_id),
+        detail,
+        selectedTotal,
+      );
+      setSent(true);
+      setSelected(new Set());
+      setTimeout(() => setSent(false), 8000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Greška");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <main>
+      <div className="bill">
+        <ul className="bill-items">
+          {bill.items.map((i) => {
+            const cls = i.paid ? "paid" : selected.has(i.order_item_id) ? "sel" : "";
+            return (
+              <li key={i.order_item_id} className={cls}>
+                <label>
+                  {!i.paid && (
+                    <input
+                      type="checkbox"
+                      checked={selected.has(i.order_item_id)}
+                      onChange={() => toggle(i.order_item_id)}
+                    />
+                  )}
+                  <span className="bi-name">
+                    {i.qty}× {i.name}
+                    {i.paid && <em> · plaćeno</em>}
+                  </span>
+                  <span className="bi-price">{i.line_total} din</span>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="bill-totals">
+          {bill.paid_total > 0 && (
+            <div className="bt-row">
+              <span>Plaćeno</span>
+              <span>{bill.paid_total} din</span>
+            </div>
+          )}
+          <div className="bt-row total">
+            <span>Za naplatu</span>
+            <span>{bill.remaining} din</span>
+          </div>
+        </div>
+
+        <button
+          className="order-btn"
+          disabled={sending || selectedItems.length === 0}
+          onClick={callSplit}
+        >
+          {sending
+            ? "Šaljem…"
+            : selectedItems.length > 0
+              ? `Pozovi konobara da naplati izabrano · ${selectedTotal} din`
+              : "Izaberi stavke za naplatu"}
+        </button>
+        {sent && <small className="ok">✓ Konobar je obavešten, stiže sa računom.</small>}
+        {error && <small className="err">{error}</small>}
+        <small className="bill-hint">💳 Plaćanje karticom online — uskoro.</small>
+      </div>
+    </main>
   );
 }

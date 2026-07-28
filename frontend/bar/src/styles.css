@@ -120,6 +120,22 @@ header h1 span { color: #e8632c; }
   border-radius: 8px; padding: 8px 14px; font-weight: 700; cursor: pointer;
 }
 
+/* zahtev za naplatu izabranih stavki — miran (ne pulsira), sa detaljima */
+.request-card.split {
+  animation: none; background: #2b2a25; color: #f2efe9;
+  border-left: 4px solid #f0b429; align-items: stretch; flex-direction: column;
+  gap: 8px; max-width: 340px;
+}
+.request-card.split .req-body { display: flex; flex-direction: column; }
+.request-card.split strong { font-size: 15px; }
+.request-card.split small { font-size: 13px; opacity: .85; }
+.req-pay { display: flex; gap: 8px; }
+.req-pay button {
+  flex: 1; border: none; background: #3a3833; color: #f2efe9;
+  border-radius: 8px; padding: 10px; font-weight: 700; cursor: pointer;
+}
+.req-pay button:hover { background: #4a4740; }
+
 .columns {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
   align-items: start;

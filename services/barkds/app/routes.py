@@ -110,7 +110,10 @@ class RequestIn(BaseModel):
     cafe_id: str
     table_number: int = Field(ge=1, le=500)
     sig: str
-    kind: str  # "waiter" | "bill"
+    kind: str  # "waiter" | "bill" | "bill_split"
+    detail: str | None = None
+    item_ids: list[int] | None = None
+    amount: int | None = None
 
 
 def _request_dict(req: ServiceRequest) -> dict:
@@ -121,29 +124,35 @@ def _request_dict(req: ServiceRequest) -> dict:
         "kind": req.kind,
         "status": req.status,
         "created_at": _iso_utc(req.created_at),
+        "detail": req.detail,
+        "item_ids": req.item_ids,
+        "amount": req.amount,
     }
 
 
 @router.post("/requests", status_code=201)
 async def create_request(body: RequestIn):
-    """Gost poziva konobara ili traži račun — potpis iz QR-a dokazuje sto."""
-    if body.kind not in ("waiter", "bill"):
+    """Gost poziva konobara, traži račun ili naplatu izabranih stavki — potpis dokazuje sto."""
+    if body.kind not in ("waiter", "bill", "bill_split"):
         raise HTTPException(status_code=400, detail="Unknown request kind")
     if not verify_table_signature(body.cafe_id, body.table_number, body.sig):
         raise HTTPException(status_code=403, detail="Invalid table signature")
 
-    # anti-spam: isti sto + ista vrsta zahteva — vrati postojeći otvoren
-    existing = await ServiceRequest.find_one(
-        ServiceRequest.cafe_id == body.cafe_id,
-        ServiceRequest.table_number == body.table_number,
-        ServiceRequest.kind == body.kind,
-        ServiceRequest.status == "OPEN",
-    )
-    if existing is not None:
-        return _request_dict(existing)
+    # anti-spam: isti sto + ista vrsta — vrati postojeći otvoren.
+    # bill_split je izuzet: svaki nosi različit skup stavki, ne sme se spajati.
+    if body.kind != "bill_split":
+        existing = await ServiceRequest.find_one(
+            ServiceRequest.cafe_id == body.cafe_id,
+            ServiceRequest.table_number == body.table_number,
+            ServiceRequest.kind == body.kind,
+            ServiceRequest.status == "OPEN",
+        )
+        if existing is not None:
+            return _request_dict(existing)
 
     req = ServiceRequest(cafe_id=body.cafe_id, table_number=body.table_number,
-                         kind=body.kind, created_at=datetime.now(timezone.utc))
+                         kind=body.kind, created_at=datetime.now(timezone.utc),
+                         detail=body.detail, item_ids=body.item_ids, amount=body.amount)
     await req.insert()
     await manager.broadcast(req.cafe_id,
                             {"type": "request.created", "request": _request_dict(req)})

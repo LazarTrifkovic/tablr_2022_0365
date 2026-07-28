@@ -42,9 +42,12 @@ export interface ServiceRequest {
   id: string;
   cafe_id: string;
   table_number: number;
-  kind: "waiter" | "bill";
+  kind: "waiter" | "bill" | "bill_split";
   status: "OPEN" | "RESOLVED";
   created_at: string;
+  detail?: string | null;
+  item_ids?: number[] | null;
+  amount?: number | null;
 }
 
 export type WsEvent =

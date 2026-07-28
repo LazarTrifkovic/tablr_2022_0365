@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -58,5 +58,7 @@ class OrderItem(Base):
     name: Mapped[str] = mapped_column(String(120))
     unit_price: Mapped[int] = mapped_column(Integer)
     qty: Mapped[int] = mapped_column(Integer)
+    # da li je ova stavka već plaćena (podela računa — plaća se po stavci)
+    paid: Mapped[bool] = mapped_column(Boolean, default=False)
 
     order: Mapped[Order] = relationship(back_populates="items")
