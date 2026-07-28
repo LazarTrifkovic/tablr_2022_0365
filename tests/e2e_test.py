@@ -378,6 +378,44 @@ async def main() -> int:
               and isinstance(al["allergens"], list),
               f"matched={al.get('matched_product')} → {al.get('allergens')}")
 
+        # 17. editor mape — vlasnik snima raspored (PATCH tables), zaštita + validacija
+        r = await c.get("/api/menu/cafes")
+        before = r.json()[0]["tables"]  # trenutni raspored (da ga vratimo na kraju)
+
+        new_layout = {"tables": [
+            {"number": 1, "zone": "Test", "shape": "round", "seats": 4,
+             "x": 10, "y": 10, "w": 14, "h": 14},
+            {"number": 2, "shape": "square", "x": 40, "y": 40, "w": 12, "h": 12},
+        ]}
+        r = await c.patch(f"/api/menu/cafes/{cafe_id}/tables", json=new_layout,
+                          headers={"Authorization": ""})
+        check("editor mape: bez tokena -> 401", r.status_code == 401)
+        r = await c.patch(f"/api/menu/cafes/{cafe_id}/tables", json=new_layout,
+                          headers={"Authorization": f"Bearer {konobar_token}"})
+        check("editor mape: konobar ne sme -> 403", r.status_code == 403)
+        r = await c.patch(f"/api/menu/cafes/{cafe_id}/tables",
+                          json={"tables": [{"number": 1}, {"number": 1}]})
+        check("editor mape: duplirani broj stola -> 400", r.status_code == 400)
+        r = await c.patch(f"/api/menu/cafes/{cafe_id}/tables",
+                          json={"tables": [{"number": 1, "x": 150, "y": 10}]})
+        check("editor mape: pozicija van opsega -> 422", r.status_code == 422)
+
+        r = await c.patch(f"/api/menu/cafes/{cafe_id}/tables", json=new_layout)
+        saved = r.json()
+        check("editor mape: vlasnik snimio raspored",
+              r.status_code == 200 and saved["tables_count"] == 2
+              and saved["tables"][0]["shape"] == "round"
+              and saved["tables"][0]["seats"] == 4,
+              f"count={saved.get('tables_count')}")
+
+        # vrati originalni raspord (idempotentan test)
+        restore = {"tables": [{k: t[k] for k in
+                   ("number", "zone", "label", "shape", "seats", "x", "y", "w", "h")}
+                   for t in before]}
+        r = await c.patch(f"/api/menu/cafes/{cafe_id}/tables", json=restore)
+        check("editor mape: originalni raspored vraćen",
+              r.status_code == 200 and r.json()["tables_count"] == len(before))
+
     failed = [r for r in results if not r[1]]
     print(f"\n{'='*50}\nUKUPNO: {len(results)} testova, "
           f"{len(results)-len(failed)} proslo, {len(failed)} palo")

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -28,6 +30,23 @@ class TableSpotOut(BaseModel):
     y: float | None = None
     w: float = 12
     h: float = 12
+
+
+class TableSpotIn(BaseModel):
+    """Jedan sto kad vlasnik snima raspored (editor mape)."""
+    number: int = Field(ge=1, le=500)
+    zone: str | None = Field(default=None, max_length=40)
+    label: str | None = Field(default=None, max_length=60)
+    shape: Literal["square", "round"] = "square"
+    seats: int | None = Field(default=None, ge=1, le=50)
+    x: float | None = Field(default=None, ge=0, le=100)
+    y: float | None = Field(default=None, ge=0, le=100)
+    w: float = Field(default=12, ge=3, le=40)
+    h: float = Field(default=12, ge=3, le=40)
+
+
+class TablesUpdate(BaseModel):
+    tables: list[TableSpotIn] = Field(max_length=200)
 
 
 class CafeOut(BaseModel):

@@ -1,22 +1,22 @@
 from typing import Literal
 
 from beanie import Document, PydanticObjectId
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pymongo import IndexModel
 
 
 class TableSpot(BaseModel):
     """Jedan sto na mapi kafića (embedded u Cafe — 10-30 po kafiću, nema kolekcije)."""
-    number: int
-    zone: str | None = None            # "Unutra" / "Bašta" / "Šank" — grupisanje na mapi
-    label: str | None = None           # kratak opis ("do prozora")
+    number: int = Field(ge=1, le=500)
+    zone: str | None = Field(default=None, max_length=40)   # grupisanje na mapi
+    label: str | None = Field(default=None, max_length=60)  # kratak opis ("do prozora")
     shape: Literal["square", "round"] = "square"
-    seats: int | None = None
+    seats: int | None = Field(default=None, ge=1, le=50)
     # slobodna pozicija na platnu u procentima (0-100); None = koristi grid fallback
-    x: float | None = None
-    y: float | None = None
-    w: float = 12
-    h: float = 12
+    x: float | None = Field(default=None, ge=0, le=100)
+    y: float | None = Field(default=None, ge=0, le=100)
+    w: float = Field(default=12, ge=3, le=40)
+    h: float = Field(default=12, ge=3, le=40)
 
 
 class Cafe(Document):

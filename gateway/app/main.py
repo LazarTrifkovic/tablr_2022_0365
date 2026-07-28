@@ -21,6 +21,7 @@ PROTECTED: list[tuple[str, str, str, str | None]] = [
     ("PATCH", "bar", r"^tickets/[^/]+/status$", None),              # promena statusa
     ("GET", "bar", r"^requests", None),                            # lista poziva konobara
     ("PATCH", "bar", r"^requests/[^/]+/resolve$", None),           # rešavanje poziva
+    ("PATCH", "menu", r"^cafes/[^/]+/tables$", "vlasnik"),         # raspored stolova → vlasnik
     ("POST", "menu", r"", None),                                  # meni izmene → osoblje
     ("PATCH", "menu", r"", None),
     ("PUT", "menu", r"", None),
