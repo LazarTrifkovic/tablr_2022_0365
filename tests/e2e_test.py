@@ -31,6 +31,21 @@ async def main() -> int:
         check("health: svi servisi ok", all(v == "ok" for v in services.values()),
               str(services))
 
+        # 1b. prijava osoblja — vlasnik token postaje default (staff pozivi ga koriste,
+        # gost rute ga ignorišu jer koriste HMAC potpis)
+        r = await c.post("/api/auth/login", json={
+            "email": "vlasnik@panorama.rs", "password": "vlasnik123"})
+        check("auth: prijava vlasnika vraća JWT",
+              r.status_code == 200 and "access_token" in r.json())
+        vlasnik_token = r.json()["access_token"]
+        r = await c.post("/api/auth/login", json={
+            "email": "konobar@panorama.rs", "password": "konobar123"})
+        konobar_token = r.json()["access_token"]
+        r = await c.post("/api/auth/login", json={
+            "email": "vlasnik@panorama.rs", "password": "pogresna"})
+        check("auth: pogrešna lozinka -> 401", r.status_code == 401)
+        c.headers["Authorization"] = f"Bearer {vlasnik_token}"
+
         # 2. meni
         r = await c.get("/api/menu/cafes")
         cafes = r.json()
@@ -222,7 +237,15 @@ async def main() -> int:
         check("rating: gost ocenio isporucenu porudzbinu",
               r.status_code == 200 and r.json().get("rating") == 5)
 
-        # arhiva sadrzi zavrsenu porudzbinu sa svim podacima za bilans smene
+        # arhiva je samo za vlasnika — konobar dobija 403, bez tokena 401
+        r = await c.get("/api/orders/orders/history", params={"cafe_id": cafe_id},
+                        headers={"Authorization": f"Bearer {konobar_token}"})
+        check("auth: konobar ne sme arhivu (403)", r.status_code == 403)
+        r = await c.get("/api/orders/orders/history", params={"cafe_id": cafe_id},
+                        headers={"Authorization": ""})
+        check("auth: arhiva bez tokena (401)", r.status_code == 401)
+
+        # arhiva sadrzi zavrsenu porudzbinu sa svim podacima za bilans smene (vlasnik token je default)
         r = await c.get("/api/orders/orders/history", params={"cafe_id": cafe_id})
         hist = r.json()
         mine = next((h for h in hist if h["id"] == oid), None)

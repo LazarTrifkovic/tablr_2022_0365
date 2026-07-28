@@ -3,6 +3,8 @@ services:
     build: ./gateway
     ports:
       - "8000:8000"
+    environment:
+      JWT_SECRET: dev-jwt-secret-change-in-prod
     depends_on:
       - menu
       - orders
@@ -76,6 +78,28 @@ services:
 
   auth:
     build: ./services/auth
+    environment:
+      DATABASE_URL: postgresql+asyncpg://auth:auth@auth-db:5432/auth
+      MENU_URL: http://menu:8000
+      JWT_SECRET: dev-jwt-secret-change-in-prod
+      APP_ENV: dev
+    depends_on:
+      auth-db:
+        condition: service_healthy
+
+  auth-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: auth
+      POSTGRES_PASSWORD: auth
+      POSTGRES_DB: auth
+    volumes:
+      - auth-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   payments:
     build: ./services/payments
@@ -101,3 +125,4 @@ volumes:
   menu-data:
   orders-data:
   barkds-data:
+  auth-data:

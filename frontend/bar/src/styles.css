@@ -23,6 +23,39 @@ header h1 span { color: #e8632c; }
   padding: 8px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
 }
 .view-tabs button.active { background: #e8632c; color: #fff; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.user-badge { font-size: 13px; color: #cfc9bd; }
+.logout-btn {
+  background: transparent; border: 1px solid #3a3833; color: #9a958a;
+  border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+}
+.logout-btn:hover { background: #2b2a25; color: #f0ede7; }
+
+/* prijava osoblja */
+.login-screen {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.login-card {
+  background: #201f1b; border: 1px solid #2b2a25; border-radius: 16px;
+  padding: 28px 24px; width: 100%; max-width: 360px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.login-card h1 { font-size: 26px; text-align: center; }
+.login-card h1 span { color: #e8632c; }
+.login-sub { text-align: center; color: #9a958a; font-size: 14px; margin-top: -6px; }
+.login-card input {
+  background: #171613; border: 1px solid #3a3833; color: #f0ede7;
+  border-radius: 10px; padding: 12px 14px; font-size: 15px;
+}
+.login-card input:focus { outline: none; border-color: #e8632c; }
+.login-card button {
+  background: #e8632c; color: #fff; border: none; border-radius: 10px;
+  padding: 13px; font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.login-card button:disabled { opacity: .6; }
+.login-err { color: #ff6b6b; font-size: 14px; text-align: center; }
+.login-demo { color: #6b665c; font-size: 12px; text-align: center; line-height: 1.7; }
+.login-demo code { background: #2b2a25; padding: 1px 6px; border-radius: 5px; color: #cfc9bd; }
 
 /* upravljanje menijem */
 .menu-manager section h2 {
