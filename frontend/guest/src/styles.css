@@ -144,3 +144,16 @@ section h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 1px;
 .bill .order-btn { margin: 12px 10px 0; width: calc(100% - 20px); }
 .bill-hint { display: block; text-align: center; color: #b3ad9f; margin-top: 10px; }
 .ok { color: #166534; display: block; text-align: center; margin-top: 8px; }
+.bill-step {
+  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: #9a8f7c; margin: 14px 10px 6px;
+}
+.bill-step:first-child { margin-top: 4px; }
+.pick-row { display: flex; gap: 8px; margin: 0 10px 8px; }
+.pick-row button {
+  flex: 1; padding: 12px; border: 2px solid #e2ddd2; background: #fff;
+  border-radius: 10px; font-size: 15px; font-weight: 600; color: #444; cursor: pointer;
+}
+.pick-row button.on { border-color: #e8632c; background: #fff4ee; color: #c24a12; }
+.pick-hint { display: block; color: #b3ad9f; margin: -2px 10px 8px; }
+.bill-done { text-align: center; color: #166534; font-weight: 700; padding: 16px 0 6px; }
