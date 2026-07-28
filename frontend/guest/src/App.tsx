@@ -287,7 +287,9 @@ function RatingBlock({
 function BillView({ ctx }: { ctx: TableCtx }) {
   const [bill, setBill] = useState<Bill | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [scope, setScope] = useState<"all" | "part">("all"); // ceo račun / deo
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [method, setMethod] = useState<"cash" | "card" | null>(null);
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
 
@@ -314,25 +316,32 @@ function BillView({ ctx }: { ctx: TableCtx }) {
   if (bill.items.length === 0)
     return <main><p className="empty">Nema stavki na računu za ovaj sto.</p></main>;
 
-  const selectedItems = bill.items.filter(
-    (i) => selected.has(i.order_item_id) && !i.paid,
-  );
-  const selectedTotal = selectedItems.reduce((sum, i) => sum + i.line_total, 0);
+  const unpaid = bill.items.filter((i) => !i.paid);
+  const allPaid = unpaid.length === 0;
+  const targetItems = scope === "all"
+    ? unpaid
+    : bill.items.filter((i) => selected.has(i.order_item_id) && !i.paid);
+  const targetTotal = targetItems.reduce((sum, i) => sum + i.line_total, 0);
+  const methodLabel = method === "cash" ? "keš" : "kartica";
+  const canSend = !sending && !!method && targetItems.length > 0;
 
-  const callSplit = async () => {
-    if (selectedItems.length === 0) return;
+  const call = async () => {
+    if (!canSend) return;
     setSending(true);
     setError(null);
     try {
-      const detail = selectedItems.map((i) => `${i.qty}× ${i.name}`).join(", ");
+      const list = targetItems.map((i) => `${i.qty}× ${i.name}`).join(", ");
+      const detail = `${list} — gost plaća: ${methodLabel}`;
       await requestBillSplit(
         ctx,
-        selectedItems.map((i) => i.order_item_id),
+        targetItems.map((i) => i.order_item_id),
         detail,
-        selectedTotal,
+        targetTotal,
       );
       setSent(true);
       setSelected(new Set());
+      setMethod(null);
+      setScope("all");
       setTimeout(() => setSent(false), 8000);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Greška");
@@ -344,13 +353,16 @@ function BillView({ ctx }: { ctx: TableCtx }) {
   return (
     <main>
       <div className="bill">
+        {/* 1 — detalji računa */}
+        <div className="bill-step">1 · Detalji računa</div>
         <ul className="bill-items">
           {bill.items.map((i) => {
+            const selectable = scope === "part" && !i.paid;
             const cls = i.paid ? "paid" : selected.has(i.order_item_id) ? "sel" : "";
             return (
               <li key={i.order_item_id} className={cls}>
                 <label>
-                  {!i.paid && (
+                  {selectable && (
                     <input
                       type="checkbox"
                       checked={selected.has(i.order_item_id)}
@@ -367,7 +379,6 @@ function BillView({ ctx }: { ctx: TableCtx }) {
             );
           })}
         </ul>
-
         <div className="bill-totals">
           {bill.paid_total > 0 && (
             <div className="bt-row">
@@ -381,20 +392,57 @@ function BillView({ ctx }: { ctx: TableCtx }) {
           </div>
         </div>
 
-        <button
-          className="order-btn"
-          disabled={sending || selectedItems.length === 0}
-          onClick={callSplit}
-        >
-          {sending
-            ? "Šaljem…"
-            : selectedItems.length > 0
-              ? `Pozovi konobara da naplati izabrano · ${selectedTotal} din`
-              : "Izaberi stavke za naplatu"}
-        </button>
-        {sent && <small className="ok">✓ Konobar je obavešten, stiže sa računom.</small>}
-        {error && <small className="err">{error}</small>}
-        <small className="bill-hint">💳 Plaćanje karticom online — uskoro.</small>
+        {allPaid ? (
+          <p className="bill-done">✓ Sve je plaćeno. Hvala!</p>
+        ) : (
+          <>
+            {/* 2 — način plaćanja */}
+            <div className="bill-step">2 · Kako plaćate?</div>
+            <div className="pick-row">
+              <button
+                className={scope === "all" ? "on" : ""}
+                onClick={() => setScope("all")}
+              >
+                Ceo račun
+              </button>
+              <button
+                className={scope === "part" ? "on" : ""}
+                onClick={() => setScope("part")}
+              >
+                Platiću deo
+              </button>
+            </div>
+            {scope === "part" && targetItems.length === 0 && (
+              <small className="pick-hint">Označite stavke iznad koje plaćate.</small>
+            )}
+
+            <div className="pick-row">
+              <button
+                className={method === "cash" ? "on" : ""}
+                onClick={() => setMethod("cash")}
+              >
+                💵 Keš
+              </button>
+              <button
+                className={method === "card" ? "on" : ""}
+                onClick={() => setMethod("card")}
+              >
+                💳 Kartica
+              </button>
+            </div>
+            <small className="bill-hint">💳 Plaćanje karticom online — uskoro.</small>
+
+            <button className="order-btn" disabled={!canSend} onClick={call}>
+              {sending
+                ? "Šaljem…"
+                : `Pozovi konobara · ${targetTotal} din`}
+            </button>
+            {sent && (
+              <small className="ok">✓ Konobar je obavešten, stiže sa računom.</small>
+            )}
+            {error && <small className="err">{error}</small>}
+          </>
+        )}
       </div>
     </main>
   );
