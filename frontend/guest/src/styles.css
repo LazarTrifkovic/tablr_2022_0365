@@ -157,3 +157,46 @@ section h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 1px;
 .pick-row button.on { border-color: #e8632c; background: #fff4ee; color: #c24a12; }
 .pick-hint { display: block; color: #b3ad9f; margin: -2px 10px 8px; }
 .bill-done { text-align: center; color: #166534; font-weight: 700; padding: 16px 0 6px; }
+
+/* račun kao papirni isečak */
+.receipt {
+  background: #fff; border-radius: 12px; padding: 6px 4px 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+.receipt-head {
+  display: flex; justify-content: space-between; padding: 12px 12px 10px;
+  font-weight: 800; font-size: 16px; border-bottom: 2px dashed #e2ddd2;
+}
+.receipt-items { list-style: none; margin: 4px 0; }
+.receipt-items li {
+  display: flex; align-items: baseline; gap: 2px; padding: 9px 12px; font-size: 15px;
+}
+.receipt-items li.sel { background: #fff4ee; }
+.receipt-items li:not(.paid) input { cursor: pointer; }
+.receipt-items input[type="checkbox"] {
+  width: 18px; height: 18px; accent-color: #e8632c; align-self: center;
+}
+.ri-name { color: #1a1a1a; }
+.ri-name em { font-style: normal; font-size: 12px; color: #a89f8d; }
+.receipt-items li.paid { color: #b3ad9f; }
+.receipt-items li.paid .ri-name { text-decoration: line-through; }
+.ri-dots { flex: 1; border-bottom: 1px dotted #cfc7b8; transform: translateY(-3px); margin: 0 6px; }
+.ri-price { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.receipt-total { padding: 10px 12px 4px; border-top: 2px dashed #e2ddd2; }
+.rt-row { display: flex; justify-content: space-between; padding: 3px 0; color: #6b6559; }
+.rt-row.grand { font-size: 19px; font-weight: 800; color: #1a1a1a; }
+
+/* donja traka za plaćanje */
+.pay-bar { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.pay-hint { text-align: center; color: #6b6559; font-weight: 600; }
+.pay-methods { display: flex; gap: 10px; }
+.pay-methods button {
+  flex: 1; padding: 15px; border: none; border-radius: 12px; cursor: pointer;
+  font-size: 16px; font-weight: 800; background: #e8632c; color: #fff;
+}
+.pay-methods button:disabled { opacity: .45; }
+.split-toggle {
+  padding: 12px; border: 2px solid #e2ddd2; background: #fff; border-radius: 12px;
+  font-size: 15px; font-weight: 700; color: #444; cursor: pointer;
+}
+.split-toggle:hover { background: #faf7f1; }
