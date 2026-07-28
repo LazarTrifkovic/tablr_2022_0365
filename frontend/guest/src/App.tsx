@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  cancelOrder,
   fetchBill,
   fetchMenu,
   fetchTableOrders,
@@ -37,6 +38,7 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
   const [tab, setTab] = useState<"menu" | "orders" | "racun">("menu");
   // cooldown po vrsti zahteva — sprečava spamovanje konobara
   const [cooldown, setCooldown] = useState<Record<string, boolean>>({});
+  const [cancelMsg, setCancelMsg] = useState<string | null>(null);
 
   const callStaff = async (kind: "waiter" | "bill") => {
     if (cooldown[kind]) return;
@@ -100,6 +102,17 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
       setError(e instanceof Error ? e.message : "Greška");
     } finally {
       setSending(false);
+    }
+  };
+
+  const cancel = async (orderId: string) => {
+    setCancelMsg(null);
+    try {
+      await cancelOrder(ctx, orderId);
+      refreshOrders();
+    } catch (e) {
+      setCancelMsg(e instanceof Error ? e.message : "Greška");
+      refreshOrders(); // stanje se možda promenilo (prihvaćeno) — osveži
     }
   };
 
@@ -172,6 +185,7 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
       {tab === "orders" && (
         <main>
           {orders.length === 0 && <p className="empty">Nema aktivnih porudžbina za ovaj sto.</p>}
+          {cancelMsg && <p className="err cancel-msg">{cancelMsg}</p>}
           {orders.map((o) => (
             <div className="order-card" key={o.id}>
               <div className="order-head">
@@ -184,6 +198,11 @@ function GuestApp({ ctx }: { ctx: TableCtx }) {
                 ))}
               </ul>
               {o.note && <small>Napomena: {o.note}</small>}
+              {o.status === "CREATED" && (
+                <button className="cancel-btn" onClick={() => cancel(o.id)}>
+                  Otkaži porudžbinu
+                </button>
+              )}
               {o.status === "DELIVERED" && (
                 <RatingBlock ctx={ctx} order={o} onRated={refreshOrders} />
               )}

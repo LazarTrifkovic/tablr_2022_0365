@@ -63,6 +63,22 @@ export async function sendRequest(
   if (!r.ok) throw new Error("Zahtev nije prošao");
 }
 
+// gost otkazuje svoju porudžbinu dok još nije prihvaćena (status CREATED)
+export async function cancelOrder(ctx: TableCtx, orderId: string): Promise<void> {
+  const r = await fetch(`${API}/api/orders/orders/${orderId}/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sig: ctx.sig }),
+  });
+  if (!r.ok) {
+    if (r.status === 409) {
+      throw new Error("Porudžbina je već prihvaćena — pozovite konobara.");
+    }
+    const b = await r.json().catch(() => ({}));
+    throw new Error(b.detail ?? "Otkazivanje nije prošlo");
+  }
+}
+
 export async function fetchBill(ctx: TableCtx): Promise<Bill> {
   const r = await fetch(
     `${API}/api/orders/tables/${ctx.cafeId}/${ctx.table}/bill?sig=${ctx.sig}`,

@@ -269,6 +269,41 @@ async def main() -> int:
               and any(i["paid"] for i in b2["items"]),
               f"remaining={b2.get('remaining')}")
 
+        # 14. gost otkazuje porudžbinu dok je CREATED (+ CAS zaštita)
+        r = await c.get(f"/api/menu/cafes/{cafe_id}/menu")
+        one = r.json()["categories"][0]["items"][0]
+
+        async def make_order(tn: int) -> str:
+            rr = await c.post("/api/orders/orders", json={
+                "cafe_id": cafe_id, "table_number": tn, "sig": sign(cafe_id, tn),
+                "items": [{"item_id": one["id"], "qty": 1}]})
+            return rr.json()["id"]
+
+        oid = await make_order(9)
+        r = await c.post(f"/api/orders/orders/{oid}/cancel",
+                         json={"sig": sign(cafe_id, 9)})
+        check("otkazivanje: gost otkazao CREATED porudzbinu",
+              r.status_code == 200 and r.json().get("status") == "CANCELLED",
+              f"status={r.status_code}")
+
+        r = await c.get(f"/api/orders/tables/{cafe_id}/9/orders",
+                        params={"sig": sign(cafe_id, 9)})
+        check("otkazivanje: otkazana nestala iz gostove liste",
+              all(o["id"] != oid for o in r.json()))
+
+        r = await c.post(f"/api/orders/orders/{oid}/cancel",
+                         json={"sig": sign(cafe_id, 9)})
+        check("otkazivanje: ponovno otkazivanje -> 409", r.status_code == 409)
+
+        r = await c.post(f"/api/orders/orders/{oid}/cancel", json={"sig": "laz"})
+        check("otkazivanje: falsifikovan potpis -> 403", r.status_code == 403)
+
+        oid2 = await make_order(9)
+        await c.patch(f"/api/bar/tickets/{oid2}/status", json={"status": "ACCEPTED"})
+        r = await c.post(f"/api/orders/orders/{oid2}/cancel",
+                         json={"sig": sign(cafe_id, 9)})
+        check("otkazivanje: posle prihvatanja -> 409 (CAS trka)", r.status_code == 409)
+
     failed = [r for r in results if not r[1]]
     print(f"\n{'='*50}\nUKUPNO: {len(results)} testova, "
           f"{len(results)-len(failed)} proslo, {len(failed)} palo")

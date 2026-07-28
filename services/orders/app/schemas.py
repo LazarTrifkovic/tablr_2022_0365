@@ -81,3 +81,8 @@ class RatingIn(BaseModel):
     sig: str
     rating: int = Field(ge=1, le=5)
     comment: str | None = Field(default=None, max_length=300)
+
+
+class CancelIn(BaseModel):
+    """Gost otkazuje svoju porudžbinu dok još nije prihvaćena — potpis dokazuje sto."""
+    sig: str
