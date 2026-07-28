@@ -56,12 +56,23 @@ Tok kroz domen izgleda ovako:
    samo svoje stavke i zatraži da se one naplate posebno (podela računa), i da
    plati gotovinom/karticom preko konobara ili online (demo Google Pay tok) —
    bez potrebe da se čitav sto slaže oko jednog zajedničkog računa.
+7. **Administracija kafića.** Vlasnik samostalno registruje svoj kafić kroz
+   javnu proceduru onboardinga (bez ručne intervencije), zatim iz posebne
+   admin aplikacije uređuje ceo meni (kategorije i stavke, ne samo dostupnost
+   u toku smene), generiše i štampa QR kodove za stolove i dodaje naloge
+   osoblja. Konobar i vlasnik su od uvođenja autentifikacije razdvojeni
+   pristupnim pravima — konobar radi svakodnevnu opsluge (tabla, statusi,
+   naplata), dok su administrativne radnje (meni, QR, osoblje, pazar
+   kafića) rezervisane isključivo za vlasnika.
 
 Sistem je organizovan kao skup nezavisnih mikroservisa iza jednog API gateway-a:
-**menu** (katalog, MongoDB), **orders** (porudžbine i status tok, PostgreSQL),
-**barkds** (bar/kuhinjski ekran uživo, MongoDB, WebSocket), **payments**
-(demo online naplata) i **auth** (planiran za sledeću fazu — uloge
-konobar/menadžer trenutno nisu razdvojene pristupnim pravima). Gost i bar
-dashboard komuniciraju isključivo kroz gateway (`/api/{servis}/...` i
-`/ws/bar/{cafe_id}`) — direktan pristup internim rutama servisa spolja je
-blokiran.
+**menu** (katalog i mapa stolova, MongoDB), **orders** (porudžbine i status
+tok, PostgreSQL), **barkds** (bar/kuhinjski ekran uživo, MongoDB, WebSocket),
+**payments** (demo online naplata) i **auth** (JWT autentifikacija i uloge
+vlasnik/konobar, PostgreSQL). Gateway validira JWT token za sve zaštićene
+(osobljanske i administrativne) rute i propušta gostove rute koje umesto
+prijave koriste HMAC potpis stola — gost tako ostaje potpuno anoniman, dok
+je pristup osoblja i vlasnika sistemu autentifikovan i ograničen po ulozi.
+Gost, bar dashboard i admin panel komuniciraju isključivo kroz gateway
+(`/api/{servis}/...` i `/ws/bar/{cafe_id}`) — direktan pristup internim
+rutama servisa spolja je blokiran.

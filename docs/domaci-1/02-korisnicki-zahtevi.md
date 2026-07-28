@@ -7,11 +7,18 @@
 | Akter | Opis | Kako se identifikuje |
 |---|---|---|
 | **Gost** | Osoba za stolom koja poručuje, prati porudžbinu, plaća i ocenjuje. | Anoniman — bez naloga; sesija je vezana za sto preko QR koda sa HMAC potpisom (`cafe_id`, broj stola, `sig`). |
-| **Konobar / bar** | Osoblje koje prima i priprema porudžbine, reaguje na zahteve gostiju i naplaćuje. | Koristi bar dashboard aplikaciju (`frontend/bar`); trenutno bez prijave — sistem još ne razlikuje konobara od menadžera (Auth servis je skelet, planiran za Fazu 3). |
-| **Menadžer / vlasnik** | Odgovoran za meni kafića i uvid u učinak smene (pazar, ocene). | Deli isti bar dashboard sa konobarom (uređivanje menija, arhiva smene); razdvajanje pristupnih prava čeka Auth servis. |
+| **Konobar** | Osoblje koje prima i priprema porudžbine, reaguje na zahteve gostiju i naplaćuje. | Prijavljen korisnik bar dashboard aplikacije (`frontend/bar`, port 5174) preko Auth servisa — JWT (HS256, TTL 12h) sa ulogom `konobar`. Ima pristup tabli/statusima tiketa, naplati računa i osnovnoj izmeni dostupnosti stavki menija; **nema** pristup arhivi/pazaru, uređivanju mape stolova ni administrativnim rutama. |
+| **Vlasnik** | Odgovoran za administraciju kafića: kompletan meni, mapu stolova, QR kodove, osoblje i uvid u učinak (pazar, ocene). | Prijavljen korisnik sa JWT ulogom `vlasnik` — ima sva prava konobara PLUS arhivu/pazar (`orders/history`), pun CRUD menija, editor mape stolova, generisanje QR kodova i upravljanje nalozima osoblja (`POST /api/auth/register`). Vlasnički nalog nastaje samostalnom registracijom kafića (`POST /api/auth/onboard`) ili ga kreira postojeći vlasnik. |
 
-Sistem je multi-tenant: sva tri aktera uvek deluju u okviru tačno jednog
-kafića (`cafe_id`), bez uvida u podatke drugih kafića.
+Konobar i vlasnik dele isti bar dashboard (`frontend/bar`) za svakodnevnu
+opslugu (tabla, statusi, naplata); dodatno, vlasnik ima pristup posebnoj
+**admin aplikaciji** (`frontend/admin`, port 5175) za administrativne
+zadatke koji se ne rade u toku opsluživanja gostiju (pun CRUD menija, QR
+generisanje, osoblje) — frontend blokira pristup admin panelu ako uloga nije
+`vlasnik`, a gateway to dodatno garantuje na serverskoj strani nezavisno od
+frontenda. Sistem je multi-tenant: svi akteri uvek deluju u okviru tačno
+jednog kafića (`cafe_id`, iz JWT tokena za osoblje/vlasnika, iz potpisa QR-a
+za gosta), bez uvida u podatke drugih kafića.
 
 ### User story-ji
 
@@ -56,6 +63,41 @@ kafića (`cafe_id`), bez uvida u podatke drugih kafića.
 > **US-9 (domen: Porudžbine — servis `orders`):**
 > Kao menadžer/vlasnik, želim uvid u arhivu završenih porudžbina sa pazarom,
 > prosečnim vremenom pripreme i prosečnom ocenom, kako bih pratio učinak smene.
+
+> **US-10 (domen: Auth + Meni — servisi `auth`, `menu`):**
+> Kao budući vlasnik kafića, želim da samostalno registrujem svoj kafić i
+> vlasnički nalog kroz jednu formu, kako bih odmah počeo da koristim tablr
+> bez ručne intervencije administratora sistema.
+
+> **US-11 (domen: Meni — servis `menu`, admin panel):**
+> Kao vlasnik, želim da iz admin panela u potpunosti uređujem meni (dodajem,
+> menjam i brišem kategorije i stavke — ne samo dostupnost u toku smene),
+> kako bih meni ažurirao van gužve, bez ograničenja koja važe za konobara.
+
+> **US-12 (domen: Meni — servis `menu`, admin panel):**
+> Kao vlasnik, želim da generišem i odštampam QR kodove za sve stolove
+> kafića, kako bih ih nalepio na stolove i pustio gostima da poručuju.
+
+> **US-13 (domen: Auth — servis `auth`, admin panel):**
+> Kao vlasnik, želim da dodam naloge za novo osoblje (konobare) i da vidim
+> spisak postojećeg osoblja, kako bih upravljao pristupom sistemu bez
+> deljenja sopstvenih kredencijala.
+
+> **US-14 (domen: Meni — servis `menu`, eksterni API Frankfurter):**
+> Kao gost za stolom, želim da vidim približnu cenu stavki menija u valuti
+> koju ja razumem (EUR/USD/GBP/CHF), kako bih lakše procenio koliko trošim
+> ako nisam navikao na dinare.
+
+> **US-15 (domen: Meni — servis `menu`, eksterni API OpenFoodFacts):**
+> Kao vlasnik/konobar koji unosi novu stavku menija, želim predlog mogućih
+> alergena na osnovu naziva stavke, kako ne bih morao ručno da pretražujem i
+> ne bih propustio bitan alergen zbog žurbe.
+
+> **US-16 (domen: Meni — servis `menu`, bar dashboard):**
+> Kao vlasnik, želim da prevlačenjem uredim raspored stolova na vizuelnoj
+> mapi (dodam, uklonim, pomerim, promenim broj/zonu/oblik stola), kako bi
+> mapa na bar dashboard-u i generisani QR kodovi odgovarali stvarnom
+> rasporedu sale.
 
 ---
 
@@ -171,9 +213,91 @@ kafića (`cafe_id`), bez uvida u podatke drugih kafića.
   `CANCELLED`) porudžbina kafića (`GET /api/orders/orders/history?cafe_id=...`).
 - **FZ-9.2** Sistem mora prikazati sažetak smene: ukupan pazar, prosečno
   vreme pripreme, prosečnu ocenu gostiju i podelu naplate po načinu plaćanja.
-- **FZ-9.3** Napomena za implementaciju: ruta trenutno nije ograničena
-  autentifikacijom (Auth servis je skelet, Faza 3) — u produkciji mora biti
-  dostupna isključivo ulozi menadžer/vlasnik.
+- **FZ-9.3** Ruta mora biti zaštićena JWT autentifikacijom i dostupna
+  isključivo ulozi vlasnik (`GET /api/orders/orders/history`) — gateway
+  odbija zahtev bez važećeg tokena (HTTP 401) ili sa ulogom `konobar`
+  (HTTP 403), pre nego što zahtev uopšte stigne do orders servisa. Već
+  implementirano, nije predlog.
+
+### FZ-10 — registracija kafića i vlasničkog naloga (US-10)
+- **FZ-10.1** Sistem mora omogućiti javnu registraciju novog kafića i
+  pripadajućeg vlasničkog naloga u jednom koraku
+  (`POST /api/auth/onboard`) — bez potrebe za prijavom ili odobrenjem
+  administratora.
+- **FZ-10.2** Registracija mora atomično kreirati kafić u menu servisu
+  (interna ruta `/internal/cafes`) i korisnički nalog sa ulogom `vlasnik`
+  vezan za taj kafić u auth servisu; ako kreiranje kafića ne uspe, nalog se
+  ne sme kreirati.
+- **FZ-10.3** Sistem mora automatski generisati jedinstven identifikator
+  (slug) kafića, tako da vlasnik ne mora ručno da bira slobodan naziv.
+- **FZ-10.4** Po uspešnoj registraciji sistem mora odmah vratiti važeći JWT
+  token, tako da je vlasnik prijavljen bez dodatnog koraka.
+
+### FZ-11 — CRUD menija u admin panelu (US-11)
+- **FZ-11.1** Sistem mora omogućiti vlasniku kreiranje, izmenu naziva/
+  redosleda i brisanje kategorija menija
+  (`POST/PATCH/DELETE /api/menu/cafes/{cafe_id}/categories[/{category_id}]`).
+- **FZ-11.2** Sistem mora omogućiti vlasniku kreiranje, potpunu izmenu
+  (naziv, opis, cena, dostupnost, napomena, alergeni, slika) i brisanje
+  stavki menija
+  (`POST/PATCH/DELETE /api/menu/cafes/{cafe_id}/items[/{item_id}]`).
+- **FZ-11.3** Brisanje kategorije mora obrisati i sve stavke koje joj
+  pripadaju (kaskadno brisanje unutar menu servisa).
+- **FZ-11.4** Kreiranje, brisanje i puna izmena kategorija/stavki moraju biti
+  dostupni isključivo ulozi vlasnik (gateway 403 za konobara); konobar
+  zadržava samo ograničenu izmenu dostupnosti/cene/napomene iz FZ-8.
+
+### FZ-12 — generisanje i štampa QR kodova (US-12)
+- **FZ-12.1** Sistem mora vlasniku generisati potpisan link za svaki sto
+  kafića (`GET /api/menu/cafes/{cafe_id}/qr-links`), sa istim HMAC potpisom
+  koji gost koristi za pristup meniju (`table_signature`).
+- **FZ-12.2** Sistem mora u admin panelu prikazati generisane linkove kao QR
+  slike (klijentsko generisanje) i omogućiti njihovu štampu.
+- **FZ-12.3** Ruta mora biti dostupna isključivo ulozi vlasnik.
+
+### FZ-13 — upravljanje osobljem (US-13)
+- **FZ-13.1** Sistem mora vlasniku prikazati spisak osoblja kafića
+  (`GET /api/auth/cafes/{cafe_id}/staff`).
+- **FZ-13.2** Sistem mora omogućiti vlasniku kreiranje novog naloga osoblja
+  (uloga `konobar` ili `vlasnik`, email, lozinka, ime) preko
+  `POST /api/auth/register`; sistem mora odbiti nepoznatu ulogu (HTTP 400).
+- **FZ-13.3** Lozinke se moraju čuvati isključivo kao bcrypt heš — sistem ne
+  sme ni u jednom trenutku sačuvati ili logovati lozinku u čitljivom obliku.
+- **FZ-13.4** Rute uvida i kreiranja osoblja moraju biti dostupne isključivo
+  ulozi vlasnik.
+
+### FZ-14 — prikaz cene u stranoj valuti (US-14)
+- **FZ-14.1** Sistem mora gostu ponuditi približnu cenu stavki menija u
+  valuti EUR, USD, GBP ili CHF pored osnovne cene u RSD
+  (`GET /api/menu/fx`).
+- **FZ-14.2** Kursevi moraju biti keširani najviše 1 h; ako eksterni servis
+  (Frankfurter) nije dostupan, sistem mora vratiti rezervne kurseve uz
+  oznaku `fresh=false`, umesto da vrati grešku gostu.
+- **FZ-14.3** Prikazana vrednost u stranoj valuti je isključivo informativna
+  („≈ cena") — jedina merodavna cena za naplatu ostaje cena u RSD iz menu
+  kataloga (FZ-1.4).
+
+### FZ-15 — predlog alergena iz eksterne baze (US-15)
+- **FZ-15.1** Sistem mora, na zahtev vlasnika/konobara koji unosi ili menja
+  stavku menija, ponuditi predlog alergena pretragom eksterne baze
+  OpenFoodFacts na osnovu naziva stavke (`GET /api/menu/allergens/search?q=`).
+- **FZ-15.2** Predložene alergene sistem mora mapirati na fiksan skup
+  srpskih naziva (npr. mleko, gluten, jaja, orašasti plodovi, kikiriki,
+  soja, riba, rakovi, mekušci, susam, celer, slačica, sulfiti, lupina).
+- **FZ-15.3** Predlog je isključivo informativan — vlasnik/konobar ručno
+  potvrđuje konačnu listu alergena pre čuvanja stavke; ako eksterni servis
+  ne odgovori, sistem mora vratiti praznu listu predloga bez greške
+  (`available: false`), a ne prekinuti unos stavke.
+
+### FZ-16 — uređivanje mape stolova (US-16)
+- **FZ-16.1** Sistem mora omogućiti vlasniku uređivanje rasporeda stolova
+  (dodavanje, uklanjanje, pomeranje, promena broja/zone/oblika/kapaciteta)
+  na vizuelnom platnu (`PATCH /api/menu/cafes/{cafe_id}/tables`).
+- **FZ-16.2** Sistem ne sme sačuvati raspored ako brojevi stolova nisu
+  jedinstveni u okviru kafića (HTTP 400).
+- **FZ-16.3** Ruta zamenjuje kompletnu listu stolova kafića odjednom
+  (najviše 200 stolova) — nema parcijalnog ažuriranja pojedinačnog stola.
+- **FZ-16.4** Ruta mora biti dostupna isključivo ulozi vlasnik.
 
 ---
 
@@ -240,4 +364,15 @@ kafića (`cafe_id`), bez uvida u podatke drugih kafića.
   potpis (256-bitni ključ `QR_SECRET`, heksadecimalni potpis dužine 64
   karaktera) se proverava na svakoj ruti koja menja ili čita podatke vezane
   za konkretan sto. Već implementirano, nije predlog.
+- **NFZ-11:** Pristup svakoj administrativnoj i osobljanskoj ruti (izmena
+  menija, mapa stolova, QR generisanje, upravljanje osobljem, arhiva/pazar,
+  naplata) mora zahtevati važeći JWT (HS256, TTL 12 h) — gateway odbija
+  zahtev bez tokena ili sa isteklim/nevažećim tokenom sa HTTP 401 pre nego
+  što stigne do servisa. Rute koje traže konkretnu ulogu (`vlasnik`) moraju
+  vratiti HTTP 403 ako je token važeći ali uloga ne odgovara. Već
+  implementirano na nivou gateway-a (`PROTECTED` lista ruta), nije predlog.
+- **NFZ-12:** Lozinke naloga osoblja/vlasnika moraju se čuvati isključivo u
+  vidu bcrypt heša — sistem nikad ne sme sačuvati, logovati ili vratiti
+  lozinku u čitljivom obliku, ni internim rutama. Već implementirano, nije
+  predlog.
 
