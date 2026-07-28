@@ -4,13 +4,14 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.db import get_session
 from app.models import STATUS_FLOW, Order, OrderItem
-from app.schemas import OrderCreate, OrderItemOut, OrderOut, RatingIn, StatusUpdate
+from app.schemas import (BillItemOut, BillOut, OrderCreate, OrderItemOut, OrderOut,
+                         RatingIn, SettleIn, StatusUpdate)
 from app.security import table_signature, verify_table_signature
 
 # koliko dugo posle isporuke gost i dalje vidi porudžbinu (da može da oceni)
@@ -37,8 +38,8 @@ def _order_out(order: Order) -> OrderOut:
         ready_at=order.ready_at,
         delivered_at=order.delivered_at,
         cancelled_at=order.cancelled_at,
-        items=[OrderItemOut(item_id=i.item_id, name=i.name,
-                            unit_price=i.unit_price, qty=i.qty)
+        items=[OrderItemOut(id=i.id, item_id=i.item_id, name=i.name,
+                            unit_price=i.unit_price, qty=i.qty, paid=i.paid)
                for i in order.items],
     )
 
@@ -150,6 +151,62 @@ async def table_orders(cafe_id: str, table_number: int, sig: str,
         .order_by(Order.created_at.desc())
     )
     return [_order_out(o) for o in result.scalars().all()]
+
+
+@router.get("/tables/{cafe_id}/{table_number}/bill", response_model=BillOut)
+async def table_bill(cafe_id: str, table_number: int, sig: str,
+                     session: AsyncSession = Depends(get_session)):
+    """Zbirni račun stola — sve stavke svih ne-otkazanih porudžbina u jedan pregled
+    (osnova za podelu računa). Potpis stola dokazuje ko gleda."""
+    if not verify_table_signature(cafe_id, table_number, sig):
+        raise HTTPException(status_code=403, detail="Invalid table signature")
+    result = await session.execute(
+        select(Order)
+        .where(Order.cafe_id == cafe_id, Order.table_number == table_number,
+               Order.status != "CANCELLED")
+        .order_by(Order.created_at)
+    )
+    items: list[BillItemOut] = []
+    subtotal = paid_total = 0
+    for order in result.scalars().all():
+        for i in order.items:
+            line = i.unit_price * i.qty
+            subtotal += line
+            if i.paid:
+                paid_total += line
+            items.append(BillItemOut(order_item_id=i.id, name=i.name,
+                                     unit_price=i.unit_price, qty=i.qty,
+                                     line_total=line, paid=i.paid))
+    return BillOut(cafe_id=cafe_id, table_number=table_number, items=items,
+                   subtotal=subtotal, paid_total=paid_total,
+                   remaining=subtotal - paid_total)
+
+
+@router.post("/tables/{cafe_id}/{table_number}/bill/settle", response_model=BillOut)
+async def settle_items(cafe_id: str, table_number: int, body: SettleIn,
+                       session: AsyncSession = Depends(get_session)):
+    """Konobar naplaćuje izabrane stavke (keš/kartica na licu mesta) → obeležava ih
+    plaćenim i one otpadaju sa računa. Staff akcija (bez potpisa; zaključati iza Auth-a)."""
+    result = await session.execute(
+        select(OrderItem)
+        .join(Order, OrderItem.order_id == Order.id)
+        .where(OrderItem.id.in_(body.order_item_ids),
+               Order.cafe_id == cafe_id, Order.table_number == table_number)
+    )
+    order_ids: set[uuid.UUID] = set()
+    for item in result.scalars().all():
+        item.paid = True
+        order_ids.add(item.order_id)
+    # beleži način plaćanja na porudžbinama tih stavki (best-effort za arhivu)
+    if body.payment_method and order_ids:
+        await session.execute(
+            update(Order).where(Order.id.in_(order_ids))
+            .values(payment_method=body.payment_method)
+        )
+    await session.commit()
+    return await table_bill(cafe_id, table_number,
+                            sig=table_signature(cafe_id, table_number),
+                            session=session)
 
 
 @router.post("/orders/{order_id}/rating", response_model=OrderOut)

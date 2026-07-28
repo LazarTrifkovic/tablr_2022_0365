@@ -37,6 +37,24 @@ export interface Order {
   items: OrderItem[];
 }
 
+export interface BillItem {
+  order_item_id: number;
+  name: string;
+  unit_price: number;
+  qty: number;
+  line_total: number;
+  paid: boolean;
+}
+
+export interface Bill {
+  cafe_id: string;
+  table_number: number;
+  items: BillItem[];
+  subtotal: number;
+  paid_total: number;
+  remaining: number;
+}
+
 export const STATUS_LABELS: Record<string, string> = {
   CREATED: "Poslato",
   ACCEPTED: "U pripremi",

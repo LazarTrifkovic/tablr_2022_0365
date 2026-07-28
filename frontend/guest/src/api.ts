@@ -1,4 +1,4 @@
-import type { Menu, Order } from "./types";
+import type { Bill, Menu, Order } from "./types";
 
 export const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -58,6 +58,37 @@ export async function sendRequest(
       table_number: ctx.table,
       sig: ctx.sig,
       kind,
+    }),
+  });
+  if (!r.ok) throw new Error("Zahtev nije prošao");
+}
+
+export async function fetchBill(ctx: TableCtx): Promise<Bill> {
+  const r = await fetch(
+    `${API}/api/orders/tables/${ctx.cafeId}/${ctx.table}/bill?sig=${ctx.sig}`,
+  );
+  if (!r.ok) throw new Error("Račun nije dostupan");
+  return r.json();
+}
+
+// gost traži da konobar naplati izabrane stavke (podela računa uživo)
+export async function requestBillSplit(
+  ctx: TableCtx,
+  itemIds: number[],
+  detail: string,
+  amount: number,
+): Promise<void> {
+  const r = await fetch(`${API}/api/bar/requests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cafe_id: ctx.cafeId,
+      table_number: ctx.table,
+      sig: ctx.sig,
+      kind: "bill_split",
+      detail,
+      item_ids: itemIds,
+      amount,
     }),
   });
   if (!r.ok) throw new Error("Zahtev nije prošao");

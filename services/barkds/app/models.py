@@ -25,12 +25,16 @@ class Ticket(Document):
 
 
 class ServiceRequest(Document):
-    """Zahtev gosta bez porudžbine: poziv konobara ili traženje računa."""
+    """Zahtev gosta bez porudžbine: poziv konobara, traženje računa ili
+    naplata izabranih stavki (podela računa uživo kod konobara)."""
     cafe_id: str
     table_number: int
-    kind: str  # "waiter" | "bill"
+    kind: str  # "waiter" | "bill" | "bill_split"
     status: str = "OPEN"  # OPEN | RESOLVED
     created_at: datetime
+    detail: str | None = None          # čitljiv sažetak izabranih stavki
+    item_ids: list[int] | None = None  # OrderItem id-jevi za naplatu (bill_split)
+    amount: int | None = None          # iznos izabranih stavki
 
     class Settings:
         name = "requests"

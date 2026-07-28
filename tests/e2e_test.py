@@ -227,6 +227,48 @@ async def main() -> int:
               and mine["payment_method"] == "card" and mine["rating"] == 5,
               f"nadjeno={mine is not None}")
 
+        # 13. zbirni racun stola + podela (konobar naplacuje izabrane stavke)
+        r = await c.get(f"/api/menu/cafes/{cafe_id}/menu")
+        cats = r.json()["categories"]
+        it_a, it_b = cats[0]["items"][0], cats[0]["items"][1]
+        # dva "gosta" za stolom 8
+        await c.post("/api/orders/orders", json={
+            "cafe_id": cafe_id, "table_number": 8, "sig": sign(cafe_id, 8),
+            "items": [{"item_id": it_a["id"], "qty": 1}]})
+        await c.post("/api/orders/orders", json={
+            "cafe_id": cafe_id, "table_number": 8, "sig": sign(cafe_id, 8),
+            "items": [{"item_id": it_b["id"], "qty": 1}]})
+
+        r = await c.get(f"/api/orders/tables/{cafe_id}/8/bill",
+                        params={"sig": sign(cafe_id, 8)})
+        bill = r.json()
+        check("racun: zbirni racun stola (sve stavke + ukupno)",
+              r.status_code == 200 and len(bill["items"]) == 2
+              and bill["remaining"] == bill["subtotal"] == it_a["price"] + it_b["price"],
+              f"remaining={bill.get('remaining')}")
+
+        r = await c.get(f"/api/orders/tables/{cafe_id}/8/bill", params={"sig": "laz"})
+        check("racun: falsifikovan potpis -> 403", r.status_code == 403)
+
+        # gost trazi da konobar naplati jednu stavku (bill_split zahtev)
+        pick = bill["items"][0]
+        r = await c.post("/api/bar/requests", json={
+            "cafe_id": cafe_id, "table_number": 8, "sig": sign(cafe_id, 8),
+            "kind": "bill_split", "detail": f'{pick["qty"]}x {pick["name"]}',
+            "item_ids": [pick["order_item_id"]], "amount": pick["line_total"]})
+        check("podela: zahtev za naplatu izabranih stavki kreiran",
+              r.status_code == 201 and r.json().get("item_ids") == [pick["order_item_id"]])
+
+        # konobar naplacuje te stavke -> otpadaju sa racuna
+        r = await c.post(f"/api/orders/tables/{cafe_id}/8/bill/settle",
+                         json={"order_item_ids": [pick["order_item_id"]],
+                               "payment_method": "cash"})
+        b2 = r.json()
+        check("podela: naplacena stavka obelezena placenom i skinuta sa preostalog",
+              r.status_code == 200 and b2["remaining"] == bill["subtotal"] - pick["line_total"]
+              and any(i["paid"] for i in b2["items"]),
+              f"remaining={b2.get('remaining')}")
+
     failed = [r for r in results if not r[1]]
     print(f"\n{'='*50}\nUKUPNO: {len(results)} testova, "
           f"{len(results)-len(failed)} proslo, {len(failed)} palo")

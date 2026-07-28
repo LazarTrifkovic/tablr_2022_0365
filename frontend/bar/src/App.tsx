@@ -118,6 +118,18 @@ function BarApp({ cafeId }: { cafeId: string }) {
     });
   };
 
+  // konobar naplaćuje izabrane stavke gosta (keš/kartica na licu mesta) pa rešava zahtev
+  const settleSplit = async (q: ServiceRequest, method: string) => {
+    if (q.item_ids && q.item_ids.length > 0) {
+      await fetch(`${API}/api/orders/tables/${cafeId}/${q.table_number}/bill/settle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order_item_ids: q.item_ids, payment_method: method }),
+      });
+    }
+    await resolveRequest(q.id);
+  };
+
   // WebSocket sa automatskim ponovnim povezivanjem
   useEffect(() => {
     let closed = false;
@@ -217,16 +229,30 @@ function BarApp({ cafeId }: { cafeId: string }) {
       <>{/* tabla porudžbina */}
       {requests.size > 0 && (
         <div className="requests-strip">
-          {[...requests.values()].map((q) => (
-            <div className="request-card" key={q.id}>
-              <span className="req-icon">{q.kind === "bill" ? "🧾" : "🔔"}</span>
-              <div>
-                <strong>Sto {q.table_number}</strong>
-                <small>{q.kind === "bill" ? "traži račun" : "zove konobara"}</small>
+          {[...requests.values()].map((q) =>
+            q.kind === "bill_split" ? (
+              <div className="request-card split" key={q.id}>
+                <span className="req-icon">🧾</span>
+                <div className="req-body">
+                  <strong>Sto {q.table_number} · naplati {q.amount} din</strong>
+                  <small>{q.detail}</small>
+                </div>
+                <div className="req-pay">
+                  <button onClick={() => settleSplit(q, "cash")}>💵 Keš</button>
+                  <button onClick={() => settleSplit(q, "card")}>💳 Kartica</button>
+                </div>
               </div>
-              <button onClick={() => resolveRequest(q.id)}>Rešeno</button>
-            </div>
-          ))}
+            ) : (
+              <div className="request-card" key={q.id}>
+                <span className="req-icon">{q.kind === "bill" ? "🧾" : "🔔"}</span>
+                <div className="req-body">
+                  <strong>Sto {q.table_number}</strong>
+                  <small>{q.kind === "bill" ? "traži račun" : "zove konobara"}</small>
+                </div>
+                <button onClick={() => resolveRequest(q.id)}>Rešeno</button>
+              </div>
+            ),
+          )}
         </div>
       )}
       <div className="columns">
