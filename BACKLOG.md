@@ -85,7 +85,10 @@
 - **[i18n]** Jezički togl SR/EN/RU — *tek na samom kraju (održavanje prevoda tokom razvoja = stalni posao).*
 
 ## Ostalo (iz CLAUDE.md / ranijih odluka)
-- **[Faza 3]** Admin panel (kreiranje kafića, meni CRUD, QR generisanje, statistika).
+- ✅ **[Faza 3 — URAĐENO]** Admin panel (`frontend/admin` :5175): onboarding „Registruj
+  kafić", meni CRUD (kategorije+stavke), QR generisanje+štampa, upravljanje osobljem.
+  Statistika smene je već u bar Arhivi. Ostaje za produkciju: GUEST_BASE_URL hardkodovan
+  (localhost:5173) — za pravi kafić postaviti pravi domen; nema „obriši kafić" rute.
 - ✅ **[Faza 3 — URAĐENO]** Eksterni API-ji: OpenFoodFacts (predlog alergena u bar Meni tabu)
   + Frankfurter (birač valute kod gosta, ≈ cena). RSD sidro (Frankfurter nema RSD).
   Ostaje za produkciju: RSD sidro je hardkodovano (117.5) — povezati na pravi izvor kursa;
