@@ -244,6 +244,13 @@ async def rate_order(order_id: uuid.UUID, body: RatingIn,
     order.rating = body.rating
     order.rating_comment = body.comment
     await session.commit()
+    # CQRS: objavi 'order.rated' — reporting ažurira prosečnu ocenu u read modelu
+    await publish_order_event({
+        "type": "order.rated",
+        "order_id": str(order.id),
+        "cafe_id": order.cafe_id,
+        "rating": body.rating,
+    })
     return _order_out(order)
 
 
@@ -301,6 +308,20 @@ async def update_status(order_id: uuid.UUID, body: StatusUpdate,
         raise HTTPException(status_code=409, detail="Order changed concurrently")
     await session.commit()
     await session.refresh(order)
+
+    # CQRS: pri isporuci objavi 'order.delivered' — reporting servis time gradi read model
+    if order.status == "DELIVERED":
+        prep = None
+        if order.accepted_at and order.ready_at:
+            prep = int((order.ready_at - order.accepted_at).total_seconds())
+        await publish_order_event({
+            "type": "order.delivered",
+            "order_id": str(order.id),
+            "cafe_id": order.cafe_id,
+            "total": order.total,
+            "prep_seconds": prep,
+            "payment_method": order.payment_method,
+        })
     return _order_out(order)
 
 

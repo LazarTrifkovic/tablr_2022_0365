@@ -15,6 +15,7 @@ from app.config import settings
 # javno (gost preko QR potpisa). Gost i osoblje dele prefikse pa se gleda metod+putanja.
 PROTECTED: list[tuple[str, str, str, str | None]] = [
     ("GET", "orders", r"^orders/history", "vlasnik"),                # arhiva/pazar → vlasnik
+    ("GET", "reporting", r"^analytics/", "vlasnik"),                # CQRS analitika → vlasnik
     ("POST", "auth", r"^register$", "vlasnik"),                      # dodavanje osoblja → vlasnik
     ("GET", "auth", r"^cafes/[^/]+/staff$", "vlasnik"),             # lista osoblja → vlasnik
     ("POST", "orders", r"^tables/[^/]+/[^/]+/bill/settle$", None),   # naplata na stolu
@@ -56,6 +57,7 @@ ROUTES = {
     "bar": settings.barkds_url,
     "auth": settings.auth_url,
     "payments": settings.payments_url,
+    "reporting": settings.reporting_url,
 }
 
 # zaglavlja koja se ne prosleđuju nazad klijentu
