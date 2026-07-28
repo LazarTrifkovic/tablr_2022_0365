@@ -64,8 +64,11 @@ services:
       BARKDS_URL: http://barkds:8000
       QR_SECRET: dev-secret-change-in-prod
       APP_ENV: dev
+      KAFKA_BOOTSTRAP: kafka:9092
     depends_on:
       orders-db:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
 
   orders-db:
@@ -88,8 +91,11 @@ services:
       MONGO_URL: mongodb://barkds-db:27017/barkds
       ORDERS_URL: http://orders:8000
       QR_SECRET: dev-secret-change-in-prod
+      KAFKA_BOOTSTRAP: kafka:9092
     depends_on:
       barkds-db:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
 
   barkds-db:
