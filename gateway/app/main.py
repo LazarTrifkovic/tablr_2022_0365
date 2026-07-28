@@ -68,6 +68,9 @@ HOP_BY_HOP = {
 
 app = FastAPI(title="Tablr API Gateway")
 
+from prometheus_fastapi_instrumentator import Instrumentator
+Instrumentator().instrument(app).expose(app)  # izloži /metrics za Prometheus
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins.split(","),

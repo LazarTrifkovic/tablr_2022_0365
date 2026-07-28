@@ -28,7 +28,10 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
 app = FastAPI(title="Tablr Auth Service", lifespan=lifespan)
+Instrumentator().instrument(app).expose(app)  # izloži /metrics za Prometheus
 
 
 @app.get("/health")

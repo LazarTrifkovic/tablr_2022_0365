@@ -5,3 +5,4 @@ motor
 httpx
 pydantic-settings
 aiokafka
+prometheus-fastapi-instrumentator

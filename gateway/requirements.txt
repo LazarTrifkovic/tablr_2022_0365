@@ -4,3 +4,4 @@ httpx
 websockets
 pydantic-settings
 pyjwt
+prometheus-fastapi-instrumentator

@@ -4,3 +4,4 @@ beanie<2
 motor
 pydantic-settings
 httpx
+prometheus-fastapi-instrumentator
