@@ -196,6 +196,15 @@ section h2 { font-size: 14px; text-transform: uppercase; letter-spacing: 1px;
 /* donja traka za plaćanje */
 .pay-bar { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
 .pay-hint { text-align: center; color: #6b6559; font-weight: 600; }
+.gpay { width: 100%; min-height: 48px; }
+.gpay > * { width: 100%; }
+.pay-or {
+  text-align: center; color: #a89f8d; font-size: 13px; margin: 2px 0;
+  display: flex; align-items: center; gap: 10px;
+}
+.pay-or::before, .pay-or::after {
+  content: ""; flex: 1; height: 1px; background: #ece7dd;
+}
 .pay-methods { display: flex; gap: 10px; }
 .pay-methods button {
   flex: 1; padding: 15px; border: none; border-radius: 12px; cursor: pointer;
