@@ -474,6 +474,40 @@ async def main() -> int:
         check("saga: kafić kompenzovan (broj kafića nepromenjen)",
               after == before, f"{before} -> {after}")
 
+        # 20. CQRS — reporting read model odražava isporučenu+ocenjenu porudžbinu (async projekcija)
+        r = await c.get(f"/api/menu/cafes/{cafe_id}/menu")
+        cq_item = r.json()["categories"][0]["items"][0]
+        before = (await c.get(f"/api/reporting/analytics/{cafe_id}")).json()
+        r = await c.post("/api/orders/orders", json={
+            "cafe_id": cafe_id, "table_number": 9, "sig": sign(cafe_id, 9),
+            "items": [{"item_id": cq_item["id"], "qty": 1}]})
+        cq_oid = r.json()["id"]
+        for _ in range(15):  # sačekaj da barkds (preko Kafke) napravi tiket
+            await asyncio.sleep(1)
+            tks = (await c.get(f"/api/bar/tickets?cafe_id={cafe_id}")).json()
+            if any(t["order_id"] == cq_oid for t in tks):
+                break
+        for st in ("ACCEPTED", "READY"):
+            await c.patch(f"/api/bar/tickets/{cq_oid}/status", json={"status": st})
+        await c.patch(f"/api/bar/tickets/{cq_oid}/status",
+                      json={"status": "DELIVERED", "payment_method": "card"})
+        await c.post(f"/api/orders/orders/{cq_oid}/rating",
+                     json={"sig": sign(cafe_id, 9), "rating": 5})
+        after = before
+        for _ in range(12):  # eventualna konzistentnost — sačekaj projektor
+            await asyncio.sleep(1)
+            after = (await c.get(f"/api/reporting/analytics/{cafe_id}")).json()
+            if after["orders_count"] > before["orders_count"]:
+                break
+        check("cqrs: read model odrazio isporuku (broj+pazar+kartica)",
+              after["orders_count"] == before["orders_count"] + 1
+              and after["revenue"] == before["revenue"] + cq_item["price"]
+              and after["card_count"] == before["card_count"] + 1,
+              f"count {before['orders_count']}→{after['orders_count']}")
+        check("cqrs: analitika zaštićena (konobar ne sme -> 403)",
+              (await c.get(f"/api/reporting/analytics/{cafe_id}",
+                           headers={"Authorization": f"Bearer {konobar_token}"})).status_code == 403)
+
     failed = [r for r in results if not r[1]]
     print(f"\n{'='*50}\nUKUPNO: {len(results)} testova, "
           f"{len(results)-len(failed)} proslo, {len(failed)} palo")

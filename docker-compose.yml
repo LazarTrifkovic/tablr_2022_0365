@@ -35,6 +35,7 @@ services:
       - barkds
       - auth
       - payments
+      - reporting
 
   menu:
     build: ./services/menu
@@ -139,6 +140,28 @@ services:
       ORDERS_URL: http://orders:8000
       QR_SECRET: dev-secret-change-in-prod
 
+  # CQRS read strana (Faza 4) — projektuje događaje u pre-sračunat analitički read model
+  reporting:
+    build: ./services/reporting
+    environment:
+      MONGO_URL: mongodb://reporting-db:27017/reporting
+      KAFKA_BOOTSTRAP: kafka:9092
+    depends_on:
+      reporting-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  reporting-db:
+    image: mongo:7
+    volumes:
+      - reporting-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   guest:
     build: ./frontend/guest
     ports:
@@ -166,3 +189,4 @@ volumes:
   barkds-data:
   auth-data:
   kafka-data:
+  reporting-data:

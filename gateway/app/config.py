@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     barkds_url: str = "http://barkds:8000"
     auth_url: str = "http://auth:8000"
     payments_url: str = "http://payments:8000"
+    reporting_url: str = "http://reporting:8000"
     # isti tajni ključ kao auth servis — gateway validira JWT osoblja
     jwt_secret: str = "dev-jwt-secret-change-in-prod"
     # zarezom razdvojene dozvoljene CORS origin adrese (frontend aplikacije)
