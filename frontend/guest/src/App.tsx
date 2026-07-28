@@ -4,6 +4,7 @@ import {
   fetchBill,
   fetchMenu,
   fetchTableOrders,
+  payOnline,
   readTableCtx,
   requestBillSplit,
   sendRequest,
@@ -11,6 +12,7 @@ import {
   submitRating,
   type TableCtx,
 } from "./api";
+import GooglePayButton from "./GooglePay";
 import { STATUS_LABELS, type Bill, type Menu, type Order } from "./types";
 
 type Cart = Record<string, number>;
@@ -368,6 +370,23 @@ function BillView({ ctx }: { ctx: TableCtx }) {
     }
   };
 
+  // online plaćanje (Google Pay TEST) — token ide Payments servisu, on obeleži plaćeno
+  const payGoogle = async (token: string) => {
+    if (sending || targetItems.length === 0) return;
+    setSending(true);
+    setError(null);
+    try {
+      await payOnline(ctx, targetItems.map((i) => i.order_item_id), targetTotal, token);
+      setSelected(new Set());
+      setSplit(false);
+      load(); // plaćene stavke odmah otpadaju
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Greška");
+    } finally {
+      setSending(false);
+    }
+  };
+
   const disabled = sending || targetItems.length === 0;
 
   return (
@@ -425,6 +444,8 @@ function BillView({ ctx }: { ctx: TableCtx }) {
                 : `Naplata izabranog · ${targetTotal} din`}
             </small>
           )}
+          <GooglePayButton amount={targetTotal} disabled={disabled} onToken={payGoogle} />
+          <div className="pay-or">ili plati kod konobara</div>
           <div className="pay-methods">
             <button disabled={disabled} onClick={() => pay("cash")}>💵 Keš</button>
             <button disabled={disabled} onClick={() => pay("card")}>💳 Kartica</button>
@@ -437,7 +458,7 @@ function BillView({ ctx }: { ctx: TableCtx }) {
           </button>
           {sent && <small className="ok">✓ Konobar je obavešten, stiže sa računom.</small>}
           {error && <small className="err">{error}</small>}
-          <small className="bill-hint">💳 Kartica online — uskoro; za sad konobar naplati na stolu.</small>
+          <small className="bill-hint">Google Pay je demo (TEST) — pravo online plaćanje stiže sa produkcijom.</small>
         </div>
       )}
     </main>

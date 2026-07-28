@@ -79,6 +79,31 @@ export async function cancelOrder(ctx: TableCtx, orderId: string): Promise<void>
   }
 }
 
+// online plaćanje (Google Pay TEST) — token ide Payments servisu, ne orders/menu
+export async function payOnline(
+  ctx: TableCtx,
+  itemIds: number[],
+  amount: number,
+  token: string,
+): Promise<void> {
+  const r = await fetch(`${API}/api/payments/pay`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cafe_id: ctx.cafeId,
+      table_number: ctx.table,
+      sig: ctx.sig,
+      order_item_ids: itemIds,
+      amount,
+      token,
+    }),
+  });
+  if (!r.ok) {
+    const b = await r.json().catch(() => ({}));
+    throw new Error(b.detail ?? "Plaćanje nije prošlo");
+  }
+}
+
 export async function fetchBill(ctx: TableCtx): Promise<Bill> {
   const r = await fetch(
     `${API}/api/orders/tables/${ctx.cafeId}/${ctx.table}/bill?sig=${ctx.sig}`,

@@ -79,6 +79,9 @@ services:
 
   payments:
     build: ./services/payments
+    environment:
+      ORDERS_URL: http://orders:8000
+      QR_SECRET: dev-secret-change-in-prod
 
   guest:
     build: ./frontend/guest

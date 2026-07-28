@@ -6,10 +6,22 @@
 > (Velike faze i plan su u `CLAUDE.md` — ovde su konkretne odložene stavke.)
 
 ## Plaćanje računa (podela)
-- **[Krug 3]** Online plaćanje karticom dela računa — *čeka Payments servis + potvrđen
-  procesor. **Stripe još nije potvrđen kod profesora — pitati na konsultacijama.***
-- **[Krug 3]** Baksiš (napojnica) uz online karticu — *ide zajedno sa online plaćanjem;
+- **[Krug 3 — DEMO URAĐEN]** Online plaćanje kroz **Google Pay TEST** (Payments servis
+  `/pay` → orders settle; dugme na „Račun"). Radi kao demo bez firme/PSP-a. Ostaje: pravi
+  procesor za produkciju (v. dole) i interaktivni test lista u pravom Chrome-u sa test karticom.
+- **[Krug 3 — PRODUKCIJA]** Pravi PSP za srpsko tržište (karta ne dira naš server, PCI SAQ A).
+  Kandidati: **Raiffeisen RaiAccept** (prvi u RS sa Apple+Google Pay prihvatom, dec. 2025) i
+  **CorvusPay** (regionalni, nije vezan za jednu banku); Monri/WSPay (Google Pay potvrđen,
+  Apple Pay proveriti). **Stripe ISKLJUČEN** — Srbija nije podržana zemlja (Stripe TEST može
+  samo kao demo). *Traži registrovanu firmu + ugovor sa PSP-om — odluka posle firme/pilota.*
+  Detalji: `2026-07-28-online-placanje-apple-pay.md` (+ veliki produkcijski izveštaj
+  `2026-07-28-placanje-produkcija-srbija-detaljno.md`, u izradi).
+- **[Krug 3]** **Apple Pay** — preskočeno: traži plaćen Apple Developer (99 USD/god) + Apple
+  uređaj čak i za web sandbox; za ispit nepotrebno, za produkciju stiže preko PSP-a (RaiAccept).
+- **[Krug 3]** Baksiš (napojnica) uz online karticu — *ide zajedno sa pravim online plaćanjem;
   keš baksiš ionako ide u ruku konobaru, mimo sistema.*
+- **[fiskalizacija]** Spoj online plaćanja sa OBAVEZNIM fiskalnim računom (ESIR/LPFR) za
+  ugostiteljstvo u Srbiji — *ključno za produkciju; obrađeno u velikom izveštaju.*
 - **[podela]** `claimed_until` kratkoročno zaključavanje stavke — *treba tek za online
   instant-plaćanje (trka pri istovremenom tapkanju); offline putanju serijalizuje konobar.*
 - **[podela]** Deljenje unutar količine (platiti 1 od „3× kafa") — *MVP plaća po celoj

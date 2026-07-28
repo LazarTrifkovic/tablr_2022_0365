@@ -114,11 +114,15 @@ async def main() -> int:
             check("orders: nevalidna tranzicija ACCEPTED->DELIVERED odbijena",
                   r.status_code == 409, f"status={r.status_code}")
 
-            # 8. gost vidi aktivne porudzbine svog stola
+            # 8. gost vidi aktivne porudzbine svog stola (otporno na nagomilane porudzbine:
+            # tvoja porudzbina je vidljiva i NIJEDNA nije sa tudjeg stola)
             r = await c.get(f"/api/orders/tables/{cafe_id}/5/orders",
                             params={"sig": sign(cafe_id, 5)})
+            mine = r.json()
             check("orders: gost vidi porudzbine svog stola",
-                  r.status_code == 200 and len(r.json()) == 1)
+                  r.status_code == 200 and any(o["id"] == order["id"] for o in mine)
+                  and all(o["table_number"] == 5 for o in mine),
+                  f"n={len(mine)}")
             r = await c.get(f"/api/orders/tables/{cafe_id}/3/orders",
                             params={"sig": sign(cafe_id, 5)})
             check("orders: potpis stola 5 ne otvara sto 3 (anti-IDOR)",
@@ -242,16 +246,18 @@ async def main() -> int:
         r = await c.get(f"/api/orders/tables/{cafe_id}/8/bill",
                         params={"sig": sign(cafe_id, 8)})
         bill = r.json()
+        names = [bi["name"] for bi in bill["items"]]
         check("racun: zbirni racun stola (sve stavke + ukupno)",
-              r.status_code == 200 and len(bill["items"]) == 2
-              and bill["remaining"] == bill["subtotal"] == it_a["price"] + it_b["price"],
+              r.status_code == 200 and it_a["name"] in names and it_b["name"] in names
+              and bill["subtotal"] == sum(bi["line_total"] for bi in bill["items"])
+              and bill["remaining"] >= it_a["price"] + it_b["price"],
               f"remaining={bill.get('remaining')}")
 
         r = await c.get(f"/api/orders/tables/{cafe_id}/8/bill", params={"sig": "laz"})
         check("racun: falsifikovan potpis -> 403", r.status_code == 403)
 
-        # gost trazi da konobar naplati jednu stavku (bill_split zahtev)
-        pick = bill["items"][0]
+        # gost trazi da konobar naplati jednu (neplacenu) stavku (bill_split zahtev)
+        pick = next(bi for bi in bill["items"] if not bi["paid"])
         r = await c.post("/api/bar/requests", json={
             "cafe_id": cafe_id, "table_number": 8, "sig": sign(cafe_id, 8),
             "kind": "bill_split", "detail": f'{pick["qty"]}x {pick["name"]}',
@@ -265,7 +271,7 @@ async def main() -> int:
                                "payment_method": "cash"})
         b2 = r.json()
         check("podela: naplacena stavka obelezena placenom i skinuta sa preostalog",
-              r.status_code == 200 and b2["remaining"] == bill["subtotal"] - pick["line_total"]
+              r.status_code == 200 and b2["remaining"] == bill["remaining"] - pick["line_total"]
               and any(i["paid"] for i in b2["items"]),
               f"remaining={b2.get('remaining')}")
 
@@ -303,6 +309,34 @@ async def main() -> int:
         r = await c.post(f"/api/orders/orders/{oid2}/cancel",
                          json={"sig": sign(cafe_id, 9)})
         check("otkazivanje: posle prihvatanja -> 409 (CAS trka)", r.status_code == 409)
+
+        # 15. online plaćanje kroz Payments servis (Google Pay TEST tok)
+        r = await c.get(f"/api/menu/cafes/{cafe_id}/menu")
+        gp_item = r.json()["categories"][0]["items"][0]
+        await c.post("/api/orders/orders", json={
+            "cafe_id": cafe_id, "table_number": 6, "sig": sign(cafe_id, 6),
+            "items": [{"item_id": gp_item["id"], "qty": 1}]})
+        r = await c.get(f"/api/orders/tables/{cafe_id}/6/bill",
+                        params={"sig": sign(cafe_id, 6)})
+        gp_bill = r.json()
+        gp_ids = [i["order_item_id"] for i in gp_bill["items"] if not i["paid"]]
+
+        r = await c.post("/api/payments/pay", json={
+            "cafe_id": cafe_id, "table_number": 6, "sig": "laz",
+            "order_item_ids": gp_ids, "amount": gp_bill["remaining"], "token": "t"})
+        check("payments: falsifikovan potpis -> 403", r.status_code == 403)
+
+        r = await c.post("/api/payments/pay", json={
+            "cafe_id": cafe_id, "table_number": 6, "sig": sign(cafe_id, 6),
+            "order_item_ids": gp_ids, "amount": gp_bill["remaining"],
+            "token": '{"fake":"gpay-test-token"}'})
+        check("payments: online placanje obelezava stavke placenim",
+              r.status_code == 200 and r.json().get("status") == "paid")
+
+        r = await c.get(f"/api/orders/tables/{cafe_id}/6/bill",
+                        params={"sig": sign(cafe_id, 6)})
+        check("payments: racun stola posle online placanja = 0",
+              r.json()["remaining"] == 0, f"remaining={r.json()['remaining']}")
 
     failed = [r for r in results if not r[1]]
     print(f"\n{'='*50}\nUKUPNO: {len(results)} testova, "
