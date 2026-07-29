@@ -508,6 +508,36 @@ async def main() -> int:
               (await c.get(f"/api/reporting/analytics/{cafe_id}",
                            headers={"Authorization": f"Bearer {konobar_token}"})).status_code == 403)
 
+        # 21. Bezbednost (recenzija Domaći I): K-1 razdvajanje uloga po poljima stavke,
+        #     K-2 multi-tenant izolacija na gateway-u.
+        r = await c.get(f"/api/menu/cafes/{cafe_id}/menu")
+        sec_item = r.json()["categories"][0]["items"][0]
+        # K-1: konobar sme dostupnost, ali NE naziv/cenu (pun CRUD menija = vlasnik)
+        r = await c.patch(f"/api/menu/cafes/{cafe_id}/items/{sec_item['id']}",
+                          json={"available": sec_item["available"]},
+                          headers={"Authorization": f"Bearer {konobar_token}"})
+        check("K-1: konobar sme da menja dostupnost -> 200", r.status_code == 200)
+        r = await c.patch(f"/api/menu/cafes/{cafe_id}/items/{sec_item['id']}",
+                          json={"price": sec_item["price"] + 500},
+                          headers={"Authorization": f"Bearer {konobar_token}"})
+        check("K-1: konobar NE sme da menja cenu -> 403", r.status_code == 403)
+        r = await c.get(f"/api/menu/cafes/{cafe_id}/menu")
+        now_price = r.json()["categories"][0]["items"][0]["price"]
+        check("K-1: cena stavke nepromenjena posle odbijanja",
+              now_price == sec_item["price"], f"{sec_item['price']} -> {now_price}")
+        # K-2: sa panorama tokenom (vlasnik) pristup tuđem kafiću je zabranjen
+        other_cafe = "0123456789abcdef01234567"  # validan ObjectId, nije panorama
+        r = await c.get("/api/orders/orders/history", params={"cafe_id": other_cafe})
+        check("K-2: arhiva tuđeg kafića (cafe_id iz query) -> 403", r.status_code == 403)
+        r = await c.get(f"/api/auth/cafes/{other_cafe}/staff")
+        check("K-2: osoblje tuđeg kafića (cafe_id iz putanje) -> 403", r.status_code == 403)
+        r = await c.get("/api/menu/cafes")
+        listed = r.json()
+        check("K-2: lista kafića filtrirana na svoj tenant",
+              r.status_code == 200 and len(listed) >= 1
+              and all(x["id"] == cafe_id for x in listed),
+              f"vraćeno kafića={len(listed)}")
+
     failed = [r for r in results if not r[1]]
     print(f"\n{'='*50}\nUKUPNO: {len(results)} testova, "
           f"{len(results)-len(failed)} proslo, {len(failed)} palo")
