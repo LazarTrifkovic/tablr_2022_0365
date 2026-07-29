@@ -7,7 +7,7 @@
 | Akter | Opis | Kako se identifikuje |
 |---|---|---|
 | **Gost** | Osoba za stolom koja poručuje, prati porudžbinu, plaća i ocenjuje. | Anoniman — bez naloga; sesija je vezana za sto preko QR koda sa HMAC potpisom (`cafe_id`, broj stola, `sig`). |
-| **Konobar** | Osoblje koje prima i priprema porudžbine, reaguje na zahteve gostiju i naplaćuje. | Prijavljen korisnik bar dashboard aplikacije (`frontend/bar`, port 5174) preko Auth servisa — JWT (HS256, TTL 12h) sa ulogom `konobar`. Ima pristup tabli/statusima tiketa, naplati računa i osnovnoj izmeni dostupnosti stavki menija; **nema** pristup arhivi/pazaru, uređivanju mape stolova ni administrativnim rutama. |
+| **Konobar** | Osoblje koje prima i priprema porudžbine, reaguje na zahteve gostiju i naplaćuje. | Prijavljen korisnik bar dashboard aplikacije (`frontend/bar`, port 5174) preko Auth servisa — JWT (HS256, TTL 12h) sa ulogom `konobar`. Ima pristup tabli/statusima tiketa, naplati računa i izmeni dostupnosti/napomene/alergena stavki menija u toku smene; **nema** pristup punom CRUD-u menija (naziv/cena/opis stavke — menu servis vraća 403), arhivi/pazaru, uređivanju mape stolova ni administrativnim rutama. |
 | **Vlasnik** | Odgovoran za administraciju kafića: kompletan meni, mapu stolova, QR kodove, osoblje i uvid u učinak (pazar, ocene). | Prijavljen korisnik sa JWT ulogom `vlasnik` — ima sva prava konobara PLUS arhivu/pazar (`orders/history`), pun CRUD menija, editor mape stolova, generisanje QR kodova i upravljanje nalozima osoblja (`POST /api/auth/register`). Vlasnički nalog nastaje samostalnom registracijom kafića (`POST /api/auth/onboard`) ili ga kreira postojeći vlasnik. |
 
 Konobar i vlasnik dele isti bar dashboard (`frontend/bar`) za svakodnevnu
@@ -16,9 +16,12 @@ opslugu (tabla, statusi, naplata); dodatno, vlasnik ima pristup posebnoj
 zadatke koji se ne rade u toku opsluživanja gostiju (pun CRUD menija, QR
 generisanje, osoblje) — frontend blokira pristup admin panelu ako uloga nije
 `vlasnik`, a gateway to dodatno garantuje na serverskoj strani nezavisno od
-frontenda. Sistem je multi-tenant: svi akteri uvek deluju u okviru tačno
-jednog kafića (`cafe_id`, iz JWT tokena za osoblje/vlasnika, iz potpisa QR-a
-za gosta), bez uvida u podatke drugih kafića.
+frontenda. Sistem je multi-tenant: svaki entitet nosi `cafe_id` i svaki upit
+filtrira po njemu. Osoblje/vlasnik deluju u okviru kafića iz svog JWT tokena, a
+gost u okviru kafića iz HMAC potpisa QR-a; gateway za svaku zaštićenu rutu
+proverava da se `cafe_id` iz zahteva (putanja/query/telo) poklapa sa `cafe_id`
+iz tokena i odbija pristup tuđem kafiću (HTTP 403), tako da nijedan akter nema
+uvid u podatke drugih kafića.
 
 ### User story-ji
 
@@ -56,9 +59,9 @@ za gosta), bez uvida u podatke drugih kafića.
 > kako bih opsluživao više stolova odjednom bez papira i dovikivanja.
 
 > **US-8 (domen: Meni — servis `menu`):**
-> Kao konobar/menadžer, želim da u toku smene promenim dostupnost, cenu ili
-> napomenu stavke menija, kako bih odmah sakrio ono čega nema, bez čekanja na
-> IT podršku.
+> Kao konobar/menadžer, želim da u toku smene promenim dostupnost, napomenu ili
+> alergene stavke menija, kako bih odmah sakrio ono čega nema ili ispravio
+> napomenu, bez čekanja na IT podršku.
 
 > **US-9 (domen: Porudžbine — servis `orders`):**
 > Kao menadžer/vlasnik, želim uvid u arhivu završenih porudžbina sa pazarom,
@@ -141,7 +144,9 @@ za gosta), bez uvida u podatke drugih kafića.
   „traži račun" jednim dodirom (`POST /api/bar/requests`, uz potpis stola).
 - **FZ-3.2** Sistem ne sme dupliranje otvorenih zahteva istog tipa za isti sto
   — ako već postoji otvoren (`OPEN`) zahtev tog tipa, vraća se postojeći
-  umesto kreiranja novog; klijent dodatno primenjuje 60-sekundni kulaun po
+  umesto kreiranja novog (pravilo važi za tipove „pozovi konobara" i „traži
+  račun"; zahtevi za podelu računa `bill_split` se ne spajaju jer svaki nosi
+  različit skup stavki); klijent dodatno primenjuje 60-sekundni kulaun po
   tipu zahteva kao zaštitu od spamovanja konobara.
 - **FZ-3.3** Novi zahtev mora biti odmah prikazan na bar dashboard-u putem
   WebSocket-a (`request.created`); konobar ga označava rešenim
@@ -203,8 +208,10 @@ za gosta), bez uvida u podatke drugih kafića.
 
 ### FZ-8 — uređivanje menija (US-8)
 - **FZ-8.1** Sistem mora omogućiti konobaru/menadžeru izmenu dostupnosti,
-  cene, opisa i napomene stavke menija u toku smene
-  (`PATCH /api/menu/cafes/{cafe_id}/items/{item_id}`).
+  napomene i liste alergena stavke menija u toku smene
+  (`PATCH /api/menu/cafes/{cafe_id}/items/{item_id}`); izmena naziva, cene i
+  opisa je deo punog CRUD-a menija i rezervisana je za vlasnika (FZ-11) — menu
+  servis odbija (403) ako konobarski token pokuša da promeni ta polja.
 - **FZ-8.2** Promena dostupnosti mora biti vidljiva gostu u meniju najkasnije
   30 sekundi (gostov klijent periodično osvežava meni).
 
@@ -224,18 +231,21 @@ za gosta), bez uvida u podatke drugih kafića.
   pripadajućeg vlasničkog naloga u jednom koraku
   (`POST /api/auth/onboard`) — bez potrebe za prijavom ili odobrenjem
   administratora.
-- **FZ-10.2** Registracija mora atomično kreirati kafić u menu servisu
-  (interna ruta `/internal/cafes`) i korisnički nalog sa ulogom `vlasnik`
-  vezan za taj kafić u auth servisu; ako kreiranje kafića ne uspe, nalog se
-  ne sme kreirati.
+- **FZ-10.2** Registracija mora slediti redosled koji garantuje da nalog ne
+  nastaje bez kafića: prvo se kafić kreira u menu servisu (interna ruta
+  `/internal/cafes`), pa tek onda korisnički nalog sa ulogom `vlasnik` vezan
+  za taj kafić u auth servisu; ako kreiranje kafića ne uspe, nalog se ne sme
+  kreirati. Obrnut delimičan neuspeh (kafić kreiran, ali kreiranje naloga
+  padne) u sinhronoj verziji nije kompenzovan — v. rizik (1) u 3.1;
+  orkestrirana saga sa kompenzacionim brisanjem kafića predmet je Faze 4.
 - **FZ-10.3** Sistem mora automatski generisati jedinstven identifikator
   (slug) kafića, tako da vlasnik ne mora ručno da bira slobodan naziv.
 - **FZ-10.4** Po uspešnoj registraciji sistem mora odmah vratiti važeći JWT
   token, tako da je vlasnik prijavljen bez dodatnog koraka.
 
 ### FZ-11 — CRUD menija u admin panelu (US-11)
-- **FZ-11.1** Sistem mora omogućiti vlasniku kreiranje, izmenu naziva/
-  redosleda i brisanje kategorija menija
+- **FZ-11.1** Sistem mora omogućiti vlasniku kreiranje, izmenu naziva
+  i brisanje kategorija menija
   (`POST/PATCH/DELETE /api/menu/cafes/{cafe_id}/categories[/{category_id}]`).
 - **FZ-11.2** Sistem mora omogućiti vlasniku kreiranje, potpunu izmenu
   (naziv, opis, cena, dostupnost, napomena, alergeni, slika) i brisanje
@@ -243,9 +253,12 @@ za gosta), bez uvida u podatke drugih kafića.
   (`POST/PATCH/DELETE /api/menu/cafes/{cafe_id}/items[/{item_id}]`).
 - **FZ-11.3** Brisanje kategorije mora obrisati i sve stavke koje joj
   pripadaju (kaskadno brisanje unutar menu servisa).
-- **FZ-11.4** Kreiranje, brisanje i puna izmena kategorija/stavki moraju biti
-  dostupni isključivo ulozi vlasnik (gateway 403 za konobara); konobar
-  zadržava samo ograničenu izmenu dostupnosti/cene/napomene iz FZ-8.
+- **FZ-11.4** Kreiranje i brisanje kategorija/stavki, izmena kategorija i puna
+  izmena stavke (naziv, opis, cena, slika) dostupni su isključivo ulozi vlasnik:
+  gateway vraća 403 za konobara na kreiranje/brisanje, a menu servis dodatno
+  odbija (403) ako konobarski token pri izmeni stavke dira bilo koje polje van
+  dostupnosti/napomene/alergena. Konobar u toku smene menja isključivo
+  dostupnost, napomenu i alergene stavke (FZ-8).
 
 ### FZ-12 — generisanje i štampa QR kodova (US-12)
 - **FZ-12.1** Sistem mora vlasniku generisati potpisan link za svaki sto
@@ -319,6 +332,12 @@ za gosta), bez uvida u podatke drugih kafića.
   *Obrazloženje:* obaveštavanje bar servisa je već implementirano kao
   best-effort HTTP poziv (ne blokira kreiranje porudžbine); potrebna je gornja
   granica koliko dugo porudžbina sme ostati nevidljiva baru pri padu servisa.
+  U sinhronoj verziji propušteni tiket (bar servis bio nedostupan) zapravo
+  ostaje nevidljiv baru — best-effort poziv nema retry ni ponovno usklađivanje —
+  pa je ovaj NFZ cilj koji tek treba u potpunosti ispuniti: ili da barkds pri
+  startu povuče aktivne porudžbine iz orders-a, ili preko asinhronog toka
+  (Kafka, Faza 4) gde bar konzument pročita propuštene događaje sa sačuvanog
+  offset-a.
 
 ### Skaliranje
 - **NFZ-3:** Sistem mora podržati najmanje **100 istovremenih gostiju po
@@ -361,9 +380,12 @@ za gosta), bez uvida u podatke drugih kafića.
   *Obrazloženje:* gost ne sme osetiti čekanje nakon klika na „Poruči" — kritičan
   trenutak za percepciju brzine aplikacije.
 - **NFZ-10:** Identitet stola mora biti kriptografski dokaziv — HMAC-SHA256
-  potpis (256-bitni ključ `QR_SECRET`, heksadecimalni potpis dužine 64
-  karaktera) se proverava na svakoj ruti koja menja ili čita podatke vezane
-  za konkretan sto. Već implementirano, nije predlog.
+  potpis nad `cafe_id:table_number` sa deljenim tajnim ključem iz env
+  promenljive `QR_SECRET` (heksadecimalni potpis dužine 64 karaktera) proverava
+  se na svakoj **gostovoj** ruti (kreiranje porudžbine, pregled porudžbina
+  stola, račun, otkazivanje, ocena, poziv konobara, online plaćanje);
+  osobljanske rute se umesto potpisa štite JWT-om (NFZ-11). Već implementirano,
+  nije predlog.
 - **NFZ-11:** Pristup svakoj administrativnoj i osobljanskoj ruti (izmena
   menija, mapa stolova, QR generisanje, upravljanje osobljem, arhiva/pazar,
   naplata) mora zahtevati važeći JWT (HS256, TTL 12 h) — gateway odbija
