@@ -96,4 +96,6 @@
 - **[Faza 5]** Pun inventar sastojaka (koktel bez limuna…) — *sad samo toggle + napomena.*
 - **[kraj projekta]** Jezički togl SR/EN/RU — *održavanje prevoda tokom razvoja = stalni posao.*
 - **[blokada]** GitHub Classroom repo nije registrovan → nema remote-a/PR-ova/Issues.
+  *Kad se registruje: push svega, prelazak na prave PR-ove sa review komentarima, i time se
+  AKTIVIRA `.github/workflows/ci.yml` (CI/CD je napisan i lokalno validiran, čeka samo remote).*
 - **[fiskalizacija]** PDV/fiskalni račun po zakonu — *zasebna pravna tema, ne otvarati bez potrebe.*
