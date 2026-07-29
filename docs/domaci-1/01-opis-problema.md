@@ -25,7 +25,8 @@ može sam da plati) bez potrebe da nekog zaustavlja.
 tablr je **multi-tenant** sistem — jedna instalacija istovremeno opslužuje više
 kafića, svaki identifikovan sa `cafe_id`; svi entiteti (meni, sto, porudžbina,
 tiket) nose taj identifikator, tako da su podaci različitih kafića potpuno
-razdvojeni.
+razdvojeni — gateway pri svakoj zaštićenoj ruti proverava da prijavljeno
+osoblje pristupa isključivo svom kafiću.
 
 Tok kroz domen izgleda ovako:
 
@@ -34,9 +35,10 @@ Tok kroz domen izgleda ovako:
    `QR_SECRET` koji drži samo server). Gost otvaranjem QR linka dobija sesiju
    vezanu za taj sto — nema registracije, lozinke ni ličnih podataka. Potpis
    sprečava da gost izmisli broj stola koji nije njegov.
-2. **Meni.** Kafić (menadžer/konobar) održava katalog kategorija i stavki
-   (naziv, cena, opis, alergeni, dostupnost, napomena). Gost vidi samo ono što
-   je trenutno dostupno.
+2. **Meni.** Kafić održava katalog kategorija i stavki (naziv, cena, opis,
+   alergeni, dostupnost, napomena) — pun CRUD radi vlasnik u admin panelu, dok
+   konobar u toku smene menja samo dostupnost, napomenu i alergene. Gost vidi
+   samo ono što je trenutno dostupno.
 3. **Porudžbina.** Gost sastavi korpu i pošalje porudžbinu. Server ponovo
    validira svaku stavku i cenu direktno iz kataloga (cena se **nikad** ne
    prihvata od klijenta) i potpis stola. Porudžbina zatim prolazi kroz jasno
@@ -62,8 +64,8 @@ Tok kroz domen izgleda ovako:
    u toku smene), generiše i štampa QR kodove za stolove i dodaje naloge
    osoblja. Konobar i vlasnik su od uvođenja autentifikacije razdvojeni
    pristupnim pravima — konobar radi svakodnevnu opsluge (tabla, statusi,
-   naplata), dok su administrativne radnje (meni, QR, osoblje, pazar
-   kafića) rezervisane isključivo za vlasnika.
+   naplata), dok su administrativne radnje (pun CRUD menija, QR kodovi, osoblje,
+   pazar kafića) rezervisane isključivo za vlasnika.
 
 Sistem je organizovan kao skup nezavisnih mikroservisa iza jednog API gateway-a:
 **menu** (katalog i mapa stolova, MongoDB), **orders** (porudžbine i status
