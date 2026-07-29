@@ -1,0 +1,65 @@
+name: CI
+
+# Continuous Integration (Faza 4): na svaki push/PR na develop|main —
+# build cele mikroservisne aplikacije + pokretanje E2E test paketa (69 provera).
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+jobs:
+  e2e:
+    name: Build + E2E
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python (za E2E klijent)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instaliraj E2E zavisnosti
+        run: pip install httpx websockets
+
+      # Pokreće backend stack potreban za E2E (baze/kafka dolaze preko depends_on).
+      # Frontendi/Prometheus/Grafana nisu potrebni za E2E — štedimo resurse runnera.
+      - name: Podigni backend stack
+        run: docker compose up -d --build gateway menu orders barkds auth payments reporting
+
+      - name: Sačekaj da svi servisi budu zdravi
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8000/health | grep -q '"reporting":"ok"'; then
+              echo "Svi servisi zdravi (~$((i*5))s)"; exit 0
+            fi
+            sleep 5
+          done
+          echo "Servisi nisu postali zdravi na vreme"; exit 1
+
+      - name: E2E testovi
+        run: python tests/e2e_test.py
+
+      - name: Logovi pri padu
+        if: failure()
+        run: docker compose logs --tail=100
+
+      - name: Gašenje
+        if: always()
+        run: docker compose down -v
+
+  # CD (Continuous Delivery) — na merge u main dokazuje da se PRODUKCIONE slike grade.
+  # Stvarni deploy target (registry/server) se dodaje kad postoji okruženje za pilot.
+  build-release:
+    name: Build produkcionih slika
+    runs-on: ubuntu-latest
+    needs: e2e
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build svih slika
+        run: docker compose build
+      # TODO(produkcija): push u container registry + deploy (čeka izbor okruženja).
