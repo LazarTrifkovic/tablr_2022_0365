@@ -1,5 +1,5 @@
 from beanie import PydanticObjectId
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 
 import re
 
@@ -51,7 +51,16 @@ async def _get_cafe_or_404(cafe_id: str) -> Cafe:
 
 
 @router.get("/cafes", response_model=list[CafeOut])
-async def list_cafes():
+async def list_cafes(x_cafe: str = Header(default="", alias="X-Cafe")):
+    """Lista kafića. Kroz gateway je zaštićena (osoblje) i filtrira se na tenant iz
+    tokena (`X-Cafe`) — osoblje vidi ISKLJUČIVO svoj kafić (multi-tenant izolacija).
+    Bez zaglavlja (interni/test pristup) vraća sve."""
+    if x_cafe:
+        try:
+            cafe = await Cafe.get(PydanticObjectId(x_cafe))
+        except Exception:
+            cafe = None
+        return [_cafe_out(cafe)] if cafe else []
     return [_cafe_out(c) for c in await Cafe.find_all().to_list()]
 
 
@@ -206,7 +215,8 @@ async def create_item(cafe_id: str, body: ItemCreate):
 
 
 @router.patch("/cafes/{cafe_id}/items/{item_id}", response_model=ItemOut)
-async def update_item(cafe_id: str, item_id: str, body: ItemUpdate):
+async def update_item(cafe_id: str, item_id: str, body: ItemUpdate,
+                      x_role: str = Header(default="", alias="X-Role")):
     cafe = await _get_cafe_or_404(cafe_id)
     try:
         item = await MenuItem.get(PydanticObjectId(item_id))
@@ -217,6 +227,16 @@ async def update_item(cafe_id: str, item_id: str, body: ItemUpdate):
         raise HTTPException(status_code=404, detail="Item not found")
 
     changes = body.model_dump(exclude_unset=True)
+    # K-1: konobar sme da menja samo operativna polja u toku smene (dostupnost/napomena/
+    # alergeni); naziv, cena, opis i slika su pun CRUD menija — rezervisano za vlasnika.
+    if x_role == "konobar":
+        allowed = {"available", "note", "allergens"}
+        forbidden = sorted(set(changes) - allowed)
+        if forbidden:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Konobar sme da menja samo {sorted(allowed)}; polja {forbidden} "
+                       "menja vlasnik.")
     for field, value in changes.items():
         setattr(item, field, value)
     await item.save()
