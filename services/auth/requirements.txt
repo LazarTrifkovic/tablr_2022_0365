@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+httpx
+pydantic-settings
+pydantic[email]
+pyjwt
+bcrypt
+prometheus-fastapi-instrumentator

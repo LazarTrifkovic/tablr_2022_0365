@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+beanie<2
+motor
+pydantic-settings
+aiokafka
+prometheus-fastapi-instrumentator

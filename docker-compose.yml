@@ -1,0 +1,219 @@
+services:
+  # Kafka (KRaft mod — bez Zookeeper-a, jedan čvor). Faza 4: async servis↔servis.
+  # Producer/consumer se vezuju na kafka:9092 unutar docker mreže.
+  kafka:
+    image: apache/kafka:3.8.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  gateway:
+    build: ./gateway
+    ports:
+      - "8000:8000"
+    environment:
+      JWT_SECRET: dev-jwt-secret-change-in-prod
+    depends_on:
+      - menu
+      - orders
+      - barkds
+      - auth
+      - payments
+      - reporting
+
+  menu:
+    build: ./services/menu
+    environment:
+      MONGO_URL: mongodb://menu-db:27017/menu
+      QR_SECRET: dev-secret-change-in-prod
+      GUEST_BASE_URL: http://localhost:5173
+    depends_on:
+      menu-db:
+        condition: service_healthy
+
+  menu-db:
+    image: mongo:7
+    volumes:
+      - menu-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  orders:
+    build: ./services/orders
+    environment:
+      DATABASE_URL: postgresql+asyncpg://orders:orders@orders-db:5432/orders
+      MENU_URL: http://menu:8000
+      BARKDS_URL: http://barkds:8000
+      QR_SECRET: dev-secret-change-in-prod
+      APP_ENV: dev
+      KAFKA_BOOTSTRAP: kafka:9092
+    depends_on:
+      orders-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  orders-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: orders
+      POSTGRES_PASSWORD: orders
+      POSTGRES_DB: orders
+    volumes:
+      - orders-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orders"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  barkds:
+    build: ./services/barkds
+    environment:
+      MONGO_URL: mongodb://barkds-db:27017/barkds
+      ORDERS_URL: http://orders:8000
+      QR_SECRET: dev-secret-change-in-prod
+      KAFKA_BOOTSTRAP: kafka:9092
+    depends_on:
+      barkds-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  barkds-db:
+    image: mongo:7
+    volumes:
+      - barkds-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  auth:
+    build: ./services/auth
+    environment:
+      DATABASE_URL: postgresql+asyncpg://auth:auth@auth-db:5432/auth
+      MENU_URL: http://menu:8000
+      JWT_SECRET: dev-jwt-secret-change-in-prod
+      APP_ENV: dev
+    depends_on:
+      auth-db:
+        condition: service_healthy
+
+  auth-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: auth
+      POSTGRES_PASSWORD: auth
+      POSTGRES_DB: auth
+    volumes:
+      - auth-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  payments:
+    build: ./services/payments
+    environment:
+      ORDERS_URL: http://orders:8000
+      QR_SECRET: dev-secret-change-in-prod
+
+  # CQRS read strana (Faza 4) — projektuje događaje u pre-sračunat analitički read model
+  reporting:
+    build: ./services/reporting
+    environment:
+      MONGO_URL: mongodb://reporting-db:27017/reporting
+      KAFKA_BOOTSTRAP: kafka:9092
+    depends_on:
+      reporting-db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  reporting-db:
+    image: mongo:7
+    volumes:
+      - reporting-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Monitoring (Faza 4) — Prometheus skuplja metrike, Grafana ih prikazuje
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+  guest:
+    build: ./frontend/guest
+    ports:
+      - "5173:80"
+    depends_on:
+      - gateway
+
+  bar:
+    build: ./frontend/bar
+    ports:
+      - "5174:80"
+    depends_on:
+      - gateway
+
+  admin:
+    build: ./frontend/admin
+    ports:
+      - "5175:80"
+    depends_on:
+      - gateway
+
+volumes:
+  menu-data:
+  orders-data:
+  barkds-data:
+  auth-data:
+  kafka-data:
+  reporting-data:
+  prometheus-data:
+  grafana-data:

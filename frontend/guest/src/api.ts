@@ -1,0 +1,162 @@
+import type { Bill, Menu, Order } from "./types";
+
+export const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+
+export interface TableCtx {
+  cafeId: string;
+  table: number;
+  sig: string;
+}
+
+export function readTableCtx(): TableCtx | null {
+  const p = new URLSearchParams(window.location.search);
+  const cafeId = p.get("cafe");
+  const table = Number(p.get("table"));
+  const sig = p.get("sig");
+  if (!cafeId || !table || !sig) return null;
+  return { cafeId, table, sig };
+}
+
+export async function fetchMenu(cafeId: string): Promise<Menu> {
+  const r = await fetch(`${API}/api/menu/cafes/${cafeId}/menu`);
+  if (!r.ok) throw new Error("Meni nije dostupan");
+  return r.json();
+}
+
+export async function submitOrder(
+  ctx: TableCtx,
+  items: { item_id: string; qty: number }[],
+  note: string,
+): Promise<Order> {
+  const r = await fetch(`${API}/api/orders/orders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cafe_id: ctx.cafeId,
+      table_number: ctx.table,
+      sig: ctx.sig,
+      note: note || null,
+      items,
+    }),
+  });
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    throw new Error(body.detail ?? "Porudžbina nije prošla");
+  }
+  return r.json();
+}
+
+export async function sendRequest(
+  ctx: TableCtx,
+  kind: "waiter" | "bill",
+): Promise<void> {
+  const r = await fetch(`${API}/api/bar/requests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cafe_id: ctx.cafeId,
+      table_number: ctx.table,
+      sig: ctx.sig,
+      kind,
+    }),
+  });
+  if (!r.ok) throw new Error("Zahtev nije prošao");
+}
+
+// gost otkazuje svoju porudžbinu dok još nije prihvaćena (status CREATED)
+export async function cancelOrder(ctx: TableCtx, orderId: string): Promise<void> {
+  const r = await fetch(`${API}/api/orders/orders/${orderId}/cancel`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sig: ctx.sig }),
+  });
+  if (!r.ok) {
+    if (r.status === 409) {
+      throw new Error("Porudžbina je već prihvaćena — pozovite konobara.");
+    }
+    const b = await r.json().catch(() => ({}));
+    throw new Error(b.detail ?? "Otkazivanje nije prošlo");
+  }
+}
+
+// online plaćanje (Google Pay TEST) — token ide Payments servisu, ne orders/menu
+export async function payOnline(
+  ctx: TableCtx,
+  itemIds: number[],
+  amount: number,
+  token: string,
+): Promise<void> {
+  const r = await fetch(`${API}/api/payments/pay`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cafe_id: ctx.cafeId,
+      table_number: ctx.table,
+      sig: ctx.sig,
+      order_item_ids: itemIds,
+      amount,
+      token,
+    }),
+  });
+  if (!r.ok) {
+    const b = await r.json().catch(() => ({}));
+    throw new Error(b.detail ?? "Plaćanje nije prošlo");
+  }
+}
+
+export async function fetchBill(ctx: TableCtx): Promise<Bill> {
+  const r = await fetch(
+    `${API}/api/orders/tables/${ctx.cafeId}/${ctx.table}/bill?sig=${ctx.sig}`,
+  );
+  if (!r.ok) throw new Error("Račun nije dostupan");
+  return r.json();
+}
+
+// gost traži da konobar naplati izabrane stavke (podela računa uživo)
+export async function requestBillSplit(
+  ctx: TableCtx,
+  itemIds: number[],
+  detail: string,
+  amount: number,
+): Promise<void> {
+  const r = await fetch(`${API}/api/bar/requests`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cafe_id: ctx.cafeId,
+      table_number: ctx.table,
+      sig: ctx.sig,
+      kind: "bill_split",
+      detail,
+      item_ids: itemIds,
+      amount,
+    }),
+  });
+  if (!r.ok) throw new Error("Zahtev nije prošao");
+}
+
+export async function fetchTableOrders(ctx: TableCtx): Promise<Order[]> {
+  const r = await fetch(
+    `${API}/api/orders/tables/${ctx.cafeId}/${ctx.table}/orders?sig=${ctx.sig}`,
+  );
+  if (!r.ok) return [];
+  return r.json();
+}
+
+export async function submitRating(
+  ctx: TableCtx,
+  orderId: string,
+  rating: number,
+  comment: string,
+): Promise<Order> {
+  const r = await fetch(`${API}/api/orders/orders/${orderId}/rating`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sig: ctx.sig, rating, comment: comment || null }),
+  });
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    throw new Error(body.detail ?? "Ocena nije prošla");
+  }
+  return r.json();
+}

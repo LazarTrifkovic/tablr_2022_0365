@@ -23,3 +23,6 @@ dist/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Claude — lična podešavanja glavne sesije (ne deli se)
+CLAUDE.local.md

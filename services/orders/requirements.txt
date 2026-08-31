@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+httpx
+pydantic-settings
+aiokafka
+prometheus-fastapi-instrumentator
