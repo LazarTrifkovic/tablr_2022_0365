@@ -2,7 +2,9 @@ from pydantic import BaseModel, EmailStr, Field
 
 
 class LoginIn(BaseModel):
-    email: EmailStr
+    # identifikator za prijavu — email ILI prosto korisničko ime (npr. demo "admin"/"konobar").
+    # Registracija/onboarding i dalje traže pravi email (EmailStr niže) — ovde je samo login.
+    email: str = Field(min_length=1, max_length=200)
     password: str = Field(min_length=1, max_length=200)
 
 

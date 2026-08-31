@@ -35,15 +35,15 @@ async def main() -> int:
         # 1b. prijava osoblja — vlasnik token postaje default (staff pozivi ga koriste,
         # gost rute ga ignorišu jer koriste HMAC potpis)
         r = await c.post("/api/auth/login", json={
-            "email": "vlasnik@panorama.rs", "password": "vlasnik123"})
+            "email": "admin", "password": "admin"})
         check("auth: prijava vlasnika vraća JWT",
               r.status_code == 200 and "access_token" in r.json())
         vlasnik_token = r.json()["access_token"]
         r = await c.post("/api/auth/login", json={
-            "email": "konobar@panorama.rs", "password": "konobar123"})
+            "email": "konobar", "password": "konobar"})
         konobar_token = r.json()["access_token"]
         r = await c.post("/api/auth/login", json={
-            "email": "vlasnik@panorama.rs", "password": "pogresna"})
+            "email": "admin", "password": "pogresna"})
         check("auth: pogrešna lozinka -> 401", r.status_code == 401)
         c.headers["Authorization"] = f"Bearer {vlasnik_token}"
 
