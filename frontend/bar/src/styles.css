@@ -53,6 +53,12 @@ header h1 span { color: #e8632c; }
   padding: 13px; font-size: 15px; font-weight: 700; cursor: pointer;
 }
 .login-card button:disabled { opacity: .6; }
+.demo-fill { display: flex; gap: 8px; }
+.demo-fill button {
+  flex: 1; background: #262521; color: #cfc9bd; border: 1px solid #3a3833;
+  border-radius: 8px; padding: 8px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.demo-fill button:hover { border-color: #e8632c; color: #f0ede7; }
 .login-err { color: #ff6b6b; font-size: 14px; text-align: center; }
 .login-demo { color: #6b665c; font-size: 12px; text-align: center; line-height: 1.7; }
 .login-demo code { background: #2b2a25; padding: 1px 6px; border-radius: 5px; color: #cfc9bd; }

@@ -10,10 +10,11 @@ from app.security import hash_password
 
 logger = logging.getLogger("auth")
 
-# demo nalozi za razvoj/ispit (lozinke su namerno proste — dev only)
+# demo nalozi za razvoj/ispit — proste kratke prijave (dev only, ne za produkciju).
+# Prvi element je "korisničko ime" kojim se prijavljuješ (login prima username, ne samo email).
 DEMO = [
-    ("vlasnik@panorama.rs", "vlasnik123", "vlasnik", "Milan (vlasnik)"),
-    ("konobar@panorama.rs", "konobar123", "konobar", "Ana (konobar)"),
+    ("admin", "admin", "vlasnik", "Milan (vlasnik)"),
+    ("konobar", "konobar", "konobar", "Ana (konobar)"),
 ]
 
 
