@@ -124,16 +124,71 @@ tablr/
 └── docker-compose.yml    # podizanje celokupnog okruženja
 ```
 
-## Bezbednost
+## Bezbednost i zaštita od ranjivosti
 
-- **HMAC-SHA256** potpis stola (`QR_SECRET`) — gostove rute su javne ali
-  kriptografski dokazuju identitet stola; cene se nikad ne primaju od klijenta.
-- **JWT** (HS256, TTL 12h) za osoblje/vlasnika, validacija na gateway-u; role
-  `vlasnik`/`konobar` ograničavaju pristup administrativnim rutama.
-- **Multi-tenant izolacija** — gateway proverava da `cafe_id` iz zahteva
-  odgovara `cafe_id` iz tokena (zabrana pristupa tuđem kafiću).
-- Lozinke isključivo kao **bcrypt** heš; parametrizovani upiti (SQLAlchemy ORM)
-  protiv SQL injekcije; CORS ograničen na tri frontend origin-a.
+### IDOR (Insecure Direct Object Reference)
+
+Najozbiljnija klasa napada za ovaj domen — identifikatori (`cafe_id`,
+`order_id`, broj stola) stoje direktno u URL-u. Tri sloja odbrane:
+
+1. **Multi-tenant guard na gateway-u** (`gateway/app/main.py`) — za svaku
+   zaštićenu rutu izvlači SVE `cafe_id` vrednosti iz zahteva (putanja, query,
+   JSON telo) i poredi ih sa `cafe_id` iz JWT-a; svako neslaganje → **403**.
+   Osoblje jednog kafića fizički ne može da dohvati podatke drugog.
+2. **HMAC potpis stola** — gost ne može da izmisli broj stola: potpis nad
+   `cafe_id:table_number` proverava se na svakoj gostovoj ruti (sto 5 ne
+   otvara račun stola 3).
+3. **Provera vlasništva nad resursom** — npr. naplata stavki proverava da
+   `OrderItem` zaista pripada tom kafiću i stolu pre izmene.
+
+### Autorizacija po ulozi
+
+**JWT** (HS256, TTL 12h) validira gateway pre nego što zahtev stigne do
+servisa: bez tokena → **401**, pogrešna uloga → **403**. Uloge `vlasnik` /
+`konobar` razdvajaju prava — konobar u smeni menja samo dostupnost/napomenu/
+alergene stavke, dok cenu i naziv može samo vlasnik (menu servis to dodatno
+proverava na osnovu `X-Role` zaglavlja, ne veruje samo frontendu).
+
+### SQL Injection
+
+Nema konkatenacije SQL stringova nigde u kodu. Svi upiti idu kroz
+**SQLAlchemy ORM** (`select()`, `update()`), koji parametrizuje vrednosti —
+korisnički unos nikad ne postaje deo SQL sintakse. MongoDB servisi koriste
+**Beanie ODM** sa tipiziranim upitima (nema `$where` ni evaluacije stringova).
+
+### XSS (Cross-Site Scripting)
+
+- **Izlaz:** React automatski enkodira sav tekst umetnut u DOM; nigde u
+  kodu se ne koristi `dangerouslySetInnerHTML`, pa unos gosta (npr. napomena
+  uz porudžbinu) ne može da se izvrši kao skripta na bar dashboard-u.
+- **Ulaz:** Pydantic modeli validiraju tip i dužinu svakog polja pre nego što
+  podatak uđe u bazu (npr. `table_number: int` sa opsegom, `note: str` sa
+  ograničenom dužinom).
+
+### CORS
+
+Gateway (`CORSMiddleware`) dozvoljava isključivo tri poznata frontend
+origin-a (`localhost:5173/5174/5175`) — **nije** `*`. Zahtev sa bilo kog
+drugog domena browser odbija pre slanja.
+
+### CSRF (Cross-Site Request Forgery)
+
+Sistem je **po dizajnu imun** na CSRF: JWT se šalje u `Authorization: Bearer`
+zaglavlju koje JavaScript eksplicitno postavlja, a **ne u kolačiću**. Browser
+ne dodaje takvo zaglavlje automatski na zahteve sa tuđeg sajta, pa napadačeva
+stranica ne može da izvrši akciju u ime prijavljenog konobara — nema šta da
+se „ukrade" jer se ništa ne šalje automatski. (Anti-CSRF token je neophodan
+kod cookie-based sesija; ovde bi bio suvišan sloj. Ako bi se autentifikacija
+ikad prebacila na kolačiće, tada bi token — ili `SameSite=Strict` — postao
+obavezan.)
+
+### Ostalo
+
+- Lozinke isključivo kao **bcrypt** heš — nikad u čitljivom obliku, ni u logu.
+- **Interne rute** (`/internal/*`, `/dev/*`) tvrdo blokirane na gateway-u →
+  dostupne samo servis-servis saobraćaju unutar Docker mreže.
+- **Cene se nikad ne primaju od klijenta** — server ih ponovo računa iz
+  kataloga pri svakom kreiranju porudžbine.
 
 ## CI/CD
 
