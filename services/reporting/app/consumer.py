@@ -67,7 +67,8 @@ async def _handle(event: dict) -> None:
 
 async def _run() -> None:
     consumer = AIOKafkaConsumer(
-        settings.order_events_topic,
+        settings.order_status_changed_topic,
+        settings.order_rated_topic,
         bootstrap_servers=settings.kafka_bootstrap,
         group_id=settings.kafka_group_id,
         value_deserializer=lambda b: json.loads(b.decode("utf-8")),
@@ -75,8 +76,9 @@ async def _run() -> None:
         enable_auto_commit=True,
     )
     await consumer.start()
-    logger.info("Projektor sluša '%s' (grupa %s)",
-                settings.order_events_topic, settings.kafka_group_id)
+    logger.info("Projektor sluša '%s' i '%s' (grupa %s)",
+                settings.order_status_changed_topic, settings.order_rated_topic,
+                settings.kafka_group_id)
     try:
         async for msg in consumer:
             try:

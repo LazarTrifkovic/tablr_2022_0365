@@ -25,9 +25,22 @@ ulaznom tačkom:
 | Bar dashboard | `frontend/bar/` | React + Vite + TS | — |
 | Admin panel | `frontend/admin/` | React + Vite + TS | — |
 
-**Asinhrona komunikacija:** Apache Kafka (KRaft) — `orders` objavljuje događaje o
-životnom ciklusu porudžbine na topic `order-events`; `barkds` i `reporting` ih
-konzumiraju nezavisno (decoupling, otpornost na prekid rada servisa).
+**Asinhrona komunikacija:** Apache Kafka (KRaft), 4 teme:
+
+| Topic | Producer | Consumer(i) |
+|---|---|---|
+| `order-created` | orders | barkds |
+| `order-status-changed` | orders | barkds, reporting |
+| `order-rated` | orders | reporting |
+| `ticket-status-requests` | barkds | **orders** |
+
+`orders` je **hibridni modul** (Consumer + Producer): konzumira zahteve za
+promenu statusa sa `ticket-status-requests` (šalje ih barkds kad konobar
+klikne dugme na dashboard-u), validira tranziciju kao vlasnik status mašine
+(CAS `WHERE status=`), i publikuje rezultat na `order-status-changed` — čime je
+i poslednja preostala sinhrona veza (barkds→orders) prešla na asinhronu, bez
+gubitka validacije (barkds dodatno radi brzu lokalnu proveru da odmah odbije
+očigledno nevalidnu tranziciju, bez čekanja na Kafka povratni krug).
 
 **Monitoring:** Prometheus + Grafana — svi servisi izlažu `/metrics`, gotov
 dashboard prati P95 latenciju i broj zahteva po servisu.

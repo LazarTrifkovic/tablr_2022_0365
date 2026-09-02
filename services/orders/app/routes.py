@@ -70,7 +70,7 @@ async def _notify_barkds(order: Order) -> None:
         "note": order.note,
         "created_at": order.created_at.isoformat(),
         "items": [{"name": i.name, "qty": i.qty} for i in order.items],
-    })
+    }, settings.order_created_topic)
 
 
 async def _notify_barkds_status(order_id: uuid.UUID, status: str) -> None:
@@ -80,7 +80,56 @@ async def _notify_barkds_status(order_id: uuid.UUID, status: str) -> None:
         "type": f"order.{status.lower()}",
         "order_id": str(order_id),
         "status": status,
-    })
+    }, settings.order_status_changed_topic)
+
+
+async def apply_status_transition(
+    order_id: uuid.UUID, new_status: str, taken_by: str | None,
+    payment_method: str | None, session: AsyncSession,
+) -> tuple[Order | None, str | None]:
+    """CAS tranzicija statusa porudžbine — deljena logika za HTTP fallback rutu
+    ISPOD i za Kafka consumer (app/consumer.py, primarni put od bara). Vraća
+    (order, None) na uspeh, (None, "not_found") ili (None, "conflict") na neuspeh
+    (nevalidna tranzicija ILI status promenjen u međuvremenu — CAS `WHERE status=`
+    razrešava trku sa gostovim otkazivanjem)."""
+    order = await session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+    current = order.status
+    if new_status not in STATUS_FLOW.get(current, set()):
+        return None, "conflict"
+    values: dict = {"status": new_status,
+                    STATUS_TIMESTAMP[new_status]: datetime.now(timezone.utc)}
+    if taken_by:
+        values["taken_by"] = taken_by
+    if payment_method:
+        values["payment_method"] = payment_method
+    result = await session.execute(
+        update(Order).where(Order.id == order_id, Order.status == current)
+        .values(**values)
+    )
+    if result.rowcount == 0:
+        return None, "conflict"
+    await session.commit()
+    await session.refresh(order)
+
+    # barkds sluša SVAKU promenu statusa (ne samo DELIVERED) da bi ažurirao tiket
+    # uživo; reporting filtrira samo "order.delivered" za CQRS read model.
+    event: dict = {
+        "type": f"order.{new_status.lower()}",
+        "order_id": str(order.id),
+        "cafe_id": order.cafe_id,
+        "status": new_status,
+    }
+    if new_status == "DELIVERED":
+        prep = None
+        if order.accepted_at and order.ready_at:
+            prep = int((order.ready_at - order.accepted_at).total_seconds())
+        event["total"] = order.total
+        event["prep_seconds"] = prep
+        event["payment_method"] = order.payment_method
+    await publish_order_event(event, settings.order_status_changed_topic)
+    return order, None
 
 
 @router.post("/orders", response_model=OrderOut, status_code=201)
@@ -250,7 +299,7 @@ async def rate_order(order_id: uuid.UUID, body: RatingIn,
         "order_id": str(order.id),
         "cafe_id": order.cafe_id,
         "rating": body.rating,
-    })
+    }, settings.order_rated_topic)
     return _order_out(order)
 
 
@@ -282,46 +331,16 @@ async def cancel_order(order_id: uuid.UUID, body: CancelIn,
 @router.patch("/internal/orders/{order_id}/status", response_model=OrderOut)
 async def update_status(order_id: uuid.UUID, body: StatusUpdate,
                         session: AsyncSession = Depends(get_session)):
-    """Interna ruta — Bar/KDS javlja promenu statusa. Tranzicija se izvodi atomski
-    (`WHERE status=<trenutni>`) da bi bila bezbedna uz gostovu cancel rutu."""
-    order = await session.get(Order, order_id)
-    if order is None:
+    """HTTP fallback za promenu statusa (primarni put od Faze seminarski je Kafka
+    consumer preko 'ticket-status-requests' — v. app/consumer.py; ruta ostaje kao
+    interni rezervni ulaz, isti obrazac kao barkds /internal/tickets/.../status)."""
+    order, error = await apply_status_transition(
+        order_id, body.status, body.taken_by, body.payment_method, session)
+    if error == "not_found":
         raise HTTPException(status_code=404, detail="Order not found")
-    current = order.status
-    if body.status not in STATUS_FLOW.get(current, set()):
-        raise HTTPException(
-            status_code=409,
-            detail=f"Invalid transition {current} -> {body.status}",
-        )
-    values: dict = {"status": body.status,
-                    STATUS_TIMESTAMP[body.status]: datetime.now(timezone.utc)}
-    if body.taken_by:
-        values["taken_by"] = body.taken_by
-    if body.payment_method:
-        values["payment_method"] = body.payment_method
-    result = await session.execute(
-        update(Order).where(Order.id == order_id, Order.status == current)
-        .values(**values)
-    )
-    if result.rowcount == 0:
-        # status se promenio između čitanja i pisanja (npr. gost otkazao u međuvremenu)
-        raise HTTPException(status_code=409, detail="Order changed concurrently")
-    await session.commit()
-    await session.refresh(order)
-
-    # CQRS: pri isporuci objavi 'order.delivered' — reporting servis time gradi read model
-    if order.status == "DELIVERED":
-        prep = None
-        if order.accepted_at and order.ready_at:
-            prep = int((order.ready_at - order.accepted_at).total_seconds())
-        await publish_order_event({
-            "type": "order.delivered",
-            "order_id": str(order.id),
-            "cafe_id": order.cafe_id,
-            "total": order.total,
-            "prep_seconds": prep,
-            "payment_method": order.payment_method,
-        })
+    if error == "conflict":
+        raise HTTPException(status_code=409,
+                            detail="Invalid transition or order changed concurrently")
     return _order_out(order)
 
 
