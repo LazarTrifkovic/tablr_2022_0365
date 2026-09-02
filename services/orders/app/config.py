@@ -7,9 +7,14 @@ class Settings(BaseSettings):
     barkds_url: str = "http://barkds:8000"
     qr_secret: str = "change-me"
     app_env: str = "dev"  # u "dev" režimu postoji /dev/sign pomoćna ruta
-    # Kafka (Faza 4) — orders OBJAVLJUJE događaje o porudžbini na ovaj topic
+    # Kafka (seminarski) — orders je HIBRIDNI modul: OBJAVLJUJE na 3 teme i
+    # KONZUMIRA sa jedne (zahtevi za promenu statusa od bara).
     kafka_bootstrap: str = "kafka:9092"
-    order_events_topic: str = "order-events"
+    order_created_topic: str = "order-created"
+    order_status_changed_topic: str = "order-status-changed"
+    order_rated_topic: str = "order-rated"
+    ticket_status_requests_topic: str = "ticket-status-requests"
+    kafka_group_id: str = "orders"
 
 
 settings = Settings()

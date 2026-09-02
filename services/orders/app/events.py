@@ -31,17 +31,19 @@ async def stop_producer() -> None:
         _producer = None
 
 
-async def publish_order_event(event: dict) -> None:
-    """Objavi događaj na order-events topic. Porudžbina je već sačuvana u bazi pre
-    ovog poziva, pa ako Kafka trenutno ne radi — logujemo i ne rušimo zahtev gosta
-    (best-effort; trajno rešenje 'outbox' je kandidat za kasnije)."""
+async def publish_order_event(event: dict, topic: str) -> None:
+    """Objavi događaj na zadati Kafka topic (order-created / order-status-changed /
+    order-rated). Porudžbina je već sačuvana u bazi pre ovog poziva, pa ako Kafka
+    trenutno ne radi — logujemo i ne rušimo zahtev gosta (best-effort; trajno
+    rešenje 'outbox' je kandidat za kasnije)."""
     if _producer is None:
         logger.warning("Kafka producer nije spreman — događaj %s preskočen",
                        event.get("type"))
         return
     try:
         payload = json.dumps(event).encode("utf-8")
-        # send_and_wait čeka potvrdu BROKERA (ne barkds-a) da je poruka trajno primljena
-        await _producer.send_and_wait(settings.order_events_topic, payload)
+        # send_and_wait čeka potvrdu BROKERA (ne konzumenta) da je poruka trajno primljena
+        await _producer.send_and_wait(topic, payload)
     except Exception as exc:  # noqa: BLE001 — Kafka nedostupna ne sme da obori porudžbinu
-        logger.warning("Objava događaja %s nije uspela: %s", event.get("type"), exc)
+        logger.warning("Objava događaja %s na %s nije uspela: %s",
+                       event.get("type"), topic, exc)

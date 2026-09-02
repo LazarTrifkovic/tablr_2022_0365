@@ -7,6 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from app.config import settings
 from app.consumer import start_consumer, stop_consumer
+from app.events import start_producer, stop_producer
 from app.models import ServiceRequest, Ticket
 from app.routes import router
 
@@ -18,9 +19,11 @@ async def lifespan(app: FastAPI):
     client = AsyncIOMotorClient(settings.mongo_url)
     await init_beanie(database=client.get_default_database(),
                       document_models=[Ticket, ServiceRequest])
-    await start_consumer()  # Kafka consumer petlja (order-events)
+    await start_producer()  # Kafka producer: ticket-status-requests (hibridni modul)
+    await start_consumer()  # Kafka consumer: order-created / order-status-changed
     yield
     await stop_consumer()
+    await stop_producer()
     client.close()
 
 

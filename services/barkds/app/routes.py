@@ -1,13 +1,12 @@
 import logging
 from datetime import datetime, timezone
 
-import httpx
 from beanie import PydanticObjectId
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from app.breaker import CircuitBreaker, CircuitOpenError
 from app.config import settings
+from app.events import publish_ticket_status_request
 from app.models import ServiceRequest, Ticket, TicketItem
 from app.security import verify_table_signature
 from app.ws import manager
@@ -15,10 +14,19 @@ from app.ws import manager
 logger = logging.getLogger("barkds")
 router = APIRouter()
 
-# prekidač za sinhroni poziv ka orders servisu (validacija tranzicije statusa)
-orders_breaker = CircuitBreaker("orders", fail_max=3, reset_timeout=10)
-
 ACTIVE_STATUSES = ["CREATED", "ACCEPTED", "READY"]
+
+# Ogledalo orders/app/models.py STATUS_FLOW — orders OSTAJE jedini vlasnik
+# konačne validacije (CAS u bazi), ali barkds ovim brzo odbija OČIGLEDNO
+# nevalidnu tranziciju bez čekanja na Kafka povratni krug (npr. ACCEPTED
+# direktno u DELIVERED, preskačući READY).
+STATUS_FLOW: dict[str, set[str]] = {
+    "CREATED": {"ACCEPTED", "CANCELLED"},
+    "ACCEPTED": {"READY", "CANCELLED"},
+    "READY": {"DELIVERED"},
+    "DELIVERED": set(),
+    "CANCELLED": set(),
+}
 
 
 def _iso_utc(dt: datetime) -> str:
@@ -74,10 +82,15 @@ async def apply_new_ticket(body: TicketIn) -> Ticket:
 
 async def apply_ticket_status(order_id: str, status: str) -> Ticket | None:
     """Menja status postojećeg tiketa i emituje `ticket.updated`. Vraća None ako
-    tiket ne postoji (npr. otkazivanje pre nego što je tiket uopšte stigao)."""
+    tiket ne postoji (npr. otkazivanje pre nego što je tiket uopšte stigao).
+    Ako je status VEĆ isti (npr. potvrda sa Kafke stigne posle optimističkog
+    lokalnog upisa u update_status ispod) — preskače upis i emitovanje, da se
+    isti prelaz ne prikaže baru dvaput."""
     ticket = await Ticket.find_one(Ticket.order_id == order_id)
     if ticket is None:
         return None
+    if ticket.status == status:
+        return ticket
     ticket.status = status
     await ticket.save()
     await manager.broadcast(ticket.cafe_id,
@@ -113,40 +126,32 @@ async def list_tickets(cafe_id: str, active: bool = True):
 
 @router.patch("/tickets/{order_id}/status")
 async def update_status(order_id: str, body: StatusUpdate):
-    """Barmen menja status tiketa; promena se vraća u orders i emituje na WS."""
+    """Barmen menja status tiketa. Ranije: sinhroni HTTP poziv ka orders-u koji
+    čeka potvrdu (Faza 4). Sad: tiket se ažurira OPTIMISTIČKI odmah (isti WS
+    ugovor za bar dashboard — frontend ne zna razliku), a zahtev se ASINHRONO
+    šalje na 'ticket-status-requests'; orders (vlasnik status mašine) ga
+    konzumira, validira i objavljuje autoritativan rezultat na
+    'order-status-changed', koji naš consumer (app/consumer.py) prima i ponovo
+    upisuje — zatvara petlju bez čekanja. Kompromis: nevalidna tranzicija se
+    tiho odbaci na orders strani bez eksplicitne ispravke ka baru (redak slučaj,
+    UI već nudi samo validne prelaze pa se praktično ne dešava)."""
     ticket = await Ticket.find_one(Ticket.order_id == order_id)
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket not found")
-
-    # orders servis je vlasnik status mašine — on validira tranziciju.
-    # Poziv ide kroz Circuit Breaker; VAŽNO: 409 (nevalidna tranzicija) je legitiman
-    # odgovor zdravog orders-a, pa NE koristimo raise_for_status unutar prekidača —
-    # prekidač broji samo transport greške (orders nedostupan), ne poslovne odbijenice.
-    async def _patch_status() -> httpx.Response:
-        async with httpx.AsyncClient(timeout=5) as client:
-            payload: dict = {"status": body.status}
-            if body.payment_method:
-                payload["payment_method"] = body.payment_method
-            return await client.patch(
-                f"{settings.orders_url}/internal/orders/{order_id}/status",
-                json=payload,
-            )
-
-    try:
-        resp = await orders_breaker.call(_patch_status)
-    except CircuitOpenError:
-        raise HTTPException(status_code=503,
-                            detail="Orders privremeno nedostupan (prekidač otvoren)")
-    except httpx.HTTPError:
-        raise HTTPException(status_code=503, detail="Orders service unavailable")
-    if resp.status_code != 200:
-        raise HTTPException(status_code=resp.status_code,
-                            detail=resp.json().get("detail", "Status update rejected"))
+    if body.status not in STATUS_FLOW.get(ticket.status, set()):
+        raise HTTPException(status_code=409,
+                            detail=f"Invalid transition {ticket.status} -> {body.status}")
 
     ticket.status = body.status
     await ticket.save()
     await manager.broadcast(ticket.cafe_id,
                             {"type": "ticket.updated", "ticket": _ticket_dict(ticket)})
+
+    event: dict = {"order_id": order_id, "status": body.status}
+    if body.payment_method:
+        event["payment_method"] = body.payment_method
+    await publish_ticket_status_request(event)
+
     return _ticket_dict(ticket)
 
 
