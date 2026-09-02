@@ -24,5 +24,7 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Claude — lična podešavanja glavne sesije (ne deli se)
+# Lokalna radna podešavanja i beleške (ne dele se)
+CLAUDE.md
 CLAUDE.local.md
+.claude/

@@ -2,8 +2,7 @@
 
 > Centralno mesto za sve što smo svesno ostavili za kasnije, da ne zaboravimo.
 > Format: **[oblast]** stavka — *zašto odloženo / čeka šta*.
-> Kad se nešto uradi, briše se odavde i upisuje red u `../NAPREDAK.md`.
-> (Velike faze i plan su u `CLAUDE.md` — ovde su konkretne odložene stavke.)
+> Kad se nešto uradi, briše se odavde.
 
 ## Plaćanje računa (podela)
 - **[Krug 3 — DEMO URAĐEN]** Online plaćanje kroz **Google Pay TEST** (Payments servis
@@ -84,7 +83,7 @@
 - **[kozmetika]** Okrugli stolovi se renderuju kao elipse (v. Mapa stolova) — *sitna CSS ispravka.*
 - **[i18n]** Jezički togl SR/EN/RU — *tek na samom kraju (održavanje prevoda tokom razvoja = stalni posao).*
 
-## Ostalo (iz CLAUDE.md / ranijih odluka)
+## Ostalo (ranije odluke)
 - ✅ **[Faza 3 — URAĐENO]** Admin panel (`frontend/admin` :5175): onboarding „Registruj
   kafić", meni CRUD (kategorije+stavke), QR generisanje+štampa, upravljanje osobljem.
   Statistika smene je već u bar Arhivi. Ostaje za produkciju: GUEST_BASE_URL hardkodovan
